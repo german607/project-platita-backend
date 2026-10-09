@@ -8,13 +8,7 @@ El cliente carga saldo en su comercio de confianza con una bonificación ("carg�
 
 ---
 
-## 1. Origen de la idea
-
-En China, casi cualquier comercio de barrio ofrece una **tarjeta de saldo cargado** (储值卡): el cliente paga por adelantado, recibe un bono y queda atado al local. Se combina con la **gestión de clientes propios** (私域运营): los comercios dejaron de depender de las plataformas y manejan su propia base de clientes por WeChat, con promociones segmentadas y reactivación de inactivos.
-
-En Uruguay este modelo casi no existe fuera de las cadenas grandes, y todo pasa por WhatsApp pero se usa a mano. Platita adapta ambos patrones al comercio uruguayo.
-
-## 2. Propuesta de valor
+## 1. Propuesta de valor
 
 **Para el comercio**
 - Cobra por adelantado: caja hoy por lo que el cliente consume el mes que viene.
@@ -26,7 +20,7 @@ En Uruguay este modelo casi no existe fuera de las cadenas grandes, y todo pasa 
 - Paga más rápido.
 - No descarga ninguna app: se identifica con su número de celular.
 
-## 3. Segmento inicial
+## 2. Segmento inicial
 
 Comercios de visita frecuente y ticket repetido:
 
@@ -38,7 +32,7 @@ Comercios de visita frecuente y ticket repetido:
 
 Arranque en 2 o 3 barrios de Montevideo (Pocitos, Cordón, Malvín) para que los comercios se refieran entre sí.
 
-## 4. Producto mínimo (MVP)
+## 3. Producto mínimo (MVP)
 
 - Panel web para el comercio, que funcione bien en el celular del mostrador.
 - Carga de saldo con bonificación configurable.
@@ -46,7 +40,7 @@ Arranque en 2 o 3 barrios de Montevideo (Pocitos, Cordón, Malvín) para que los
 - Mensaje automático de WhatsApp con el saldo después de cada uso.
 - Lista de clientes inactivos y envío de una promo con un clic.
 
-## 5. Decisión clave: no tocar la plata
+## 4. Decisión clave: no tocar la plata
 
 La carga se cobra **directamente en la cuenta de Mercado Pago del comercio, o en efectivo en el local**. La plataforma solo lleva el registro del saldo.
 
@@ -56,7 +50,7 @@ La carga se cobra **directamente en la cuenta de Mercado Pago del comercio, o en
 
 > ⚠️ Validar con un abogado y un contador antes de lanzar, en especial el encuadre del saldo cerrado y el tratamiento contable del saldo que nunca se consume.
 
-## 6. Monetización
+## 5. Monetización
 
 | Plan | Precio aprox. | Incluye |
 |---|---|---|
@@ -67,7 +61,7 @@ La carga se cobra **directamente en la cuenta de Mercado Pago del comercio, o en
 - **Extra:** el costo de los mensajes de WhatsApp se traslada al comercio con un pequeño margen.
 - **Sin comisión sobre las cargas**, al menos al principio. "No te cobramos por tu plata" es un argumento de venta.
 
-## 7. Números de referencia (hipótesis a validar)
+## 6. Números de referencia (hipótesis a validar)
 
 | Comercios | Ticket promedio | Facturación mensual |
 |---|---|---|
@@ -77,14 +71,14 @@ La carga se cobra **directamente en la cuenta de Mercado Pago del comercio, o en
 - Costos fijos bajos: hosting, API de WhatsApp, dominio. Casi todo es margen.
 - **Métrica principal:** saldo cargado por comercio por mes. Si crece, el comercio no se va.
 
-## 8. Canales de adquisición
+## 7. Canales de adquisición
 
 - **Venta directa en el mostrador.** El pitch se demuestra en 5 minutos.
 - **Estudios contables como socios.** Asesoran a decenas de comercios chicos; se les da una comisión recurrente.
 - **Referidos entre comercios.** Un mes gratis por cada comercio que traigan.
 - **Casos reales en Instagram** con números ("esta barbería adelantó $80.000 en un mes").
 
-## 9. Competencia
+## 8. Competencia
 
 | Actor | Qué hace | Relación con Platita |
 |---|---|---|
@@ -95,7 +89,7 @@ La carga se cobra **directamente en la cuenta de Mercado Pago del comercio, o en
 
 **Diferenciación:** puntos y sellos ya es terreno competido. Lo que nadie ofrece es **la caja por adelantado**, un argumento más fuerte para un comercio chico que los puntos. Además, el saldo ya cargado por los clientes hace que el comercio no se cambie fácilmente.
 
-## 10. Riesgos
+## 9. Riesgos
 
 | Riesgo | Mitigación |
 |---|---|
@@ -104,7 +98,7 @@ La carga se cobra **directamente en la cuenta de Mercado Pago del comercio, o en
 | Que Tienda de Puntos llegue a Uruguay o agregue saldo | Moverse rápido en pocos barrios y atar comercios con saldo cargado |
 | Adopción: que el comercio no lo empuje | Material listo: cartel de mostrador y QR |
 
-## 11. Validación en 4 semanas
+## 10. Validación en 4 semanas
 
 1. Conseguir 5 comercios y llevarles el saldo con una planilla y WhatsApp a mano (MVP "concierge").
 2. Medir cuántos clientes cargan saldo y cuánto vuelven.
@@ -114,7 +108,7 @@ Antes de empezar: preguntar a 10 comercios qué usan hoy para fidelizar. Sirve c
 
 ---
 
-## 12. Backend (este repositorio)
+## 11. Backend (este repositorio)
 
 ### Stack
 
