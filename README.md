@@ -1,0 +1,153 @@
+# Platita
+
+**Saldo prepago y fidelización para comercios de barrio en Uruguay.**
+
+> "Te adelanto plata y te hago volver a los clientes."
+
+El cliente carga saldo en su comercio de confianza con una bonificación ("cargá $2.000 y recibís $2.300"), paga descontando ese saldo, y el comercio puede reactivar por WhatsApp a quien dejó de venir.
+
+---
+
+## 1. Origen de la idea
+
+En China, casi cualquier comercio de barrio ofrece una **tarjeta de saldo cargado** (储值卡): el cliente paga por adelantado, recibe un bono y queda atado al local. Se combina con la **gestión de clientes propios** (私域运营): los comercios dejaron de depender de las plataformas y manejan su propia base de clientes por WeChat, con promociones segmentadas y reactivación de inactivos.
+
+En Uruguay este modelo casi no existe fuera de las cadenas grandes, y todo pasa por WhatsApp pero se usa a mano. Platita adapta ambos patrones al comercio uruguayo.
+
+## 2. Propuesta de valor
+
+**Para el comercio**
+- Cobra por adelantado: caja hoy por lo que el cliente consume el mes que viene.
+- El cliente vuelve porque tiene saldo cargado.
+- Puede reactivar por WhatsApp a quien dejó de venir.
+
+**Para el cliente final**
+- Recibe un bono por cargar saldo.
+- Paga más rápido.
+- No descarga ninguna app: se identifica con su número de celular.
+
+## 3. Segmento inicial
+
+Comercios de visita frecuente y ticket repetido:
+
+- Cafeterías
+- Barberías y peluquerías
+- Estudios de pilates y yoga
+- Panaderías
+- Lavaderos
+
+Arranque en 2 o 3 barrios de Montevideo (Pocitos, Cordón, Malvín) para que los comercios se refieran entre sí.
+
+## 4. Producto mínimo (MVP)
+
+- Panel web para el comercio, que funcione bien en el celular del mostrador.
+- Carga de saldo con bonificación configurable.
+- Cobro descontando saldo, buscando al cliente por teléfono o por un QR propio.
+- Mensaje automático de WhatsApp con el saldo después de cada uso.
+- Lista de clientes inactivos y envío de una promo con un clic.
+
+## 5. Decisión clave: no tocar la plata
+
+La carga se cobra **directamente en la cuenta de Mercado Pago del comercio, o en efectivo en el local**. La plataforma solo lleva el registro del saldo.
+
+- Simplifica mucho lo regulatorio: no hay custodia de fondos.
+- El saldo es **cerrado**: solo vale en el comercio que lo emitió.
+- Referencia: en Uruguay, quien emite dinero electrónico necesita autorización del Banco Central (por ejemplo, Midinero opera como Institución Emisora de Dinero Electrónico). Platita evita ese terreno al no guardar dinero.
+
+> ⚠️ Validar con un abogado y un contador antes de lanzar, en especial el encuadre del saldo cerrado y el tratamiento contable del saldo que nunca se consume.
+
+## 6. Monetización
+
+| Plan | Precio aprox. | Incluye |
+|---|---|---|
+| Básico | USD 29/mes | Saldo prepago, hasta 300 clientes |
+| Pro | USD 59/mes | Clientes ilimitados, campañas de WhatsApp, reportes |
+| Multi-local | USD 99/mes | Para cadenas chicas |
+
+- **Extra:** el costo de los mensajes de WhatsApp se traslada al comercio con un pequeño margen.
+- **Sin comisión sobre las cargas**, al menos al principio. "No te cobramos por tu plata" es un argumento de venta.
+
+## 7. Números de referencia (hipótesis a validar)
+
+| Comercios | Ticket promedio | Facturación mensual |
+|---|---|---|
+| 30 | USD 45 | ~USD 1.350 — cubre costos y prueba el modelo |
+| 150 | USD 45 | ~USD 6.750 — ya es un negocio |
+
+- Costos fijos bajos: hosting, API de WhatsApp, dominio. Casi todo es margen.
+- **Métrica principal:** saldo cargado por comercio por mes. Si crece, el comercio no se va.
+
+## 8. Canales de adquisición
+
+- **Venta directa en el mostrador.** El pitch se demuestra en 5 minutos.
+- **Estudios contables como socios.** Asesoran a decenas de comercios chicos; se les da una comisión recurrente.
+- **Referidos entre comercios.** Un mes gratis por cada comercio que traigan.
+- **Casos reales en Instagram** con números ("esta barbería adelantó $80.000 en un mes").
+
+## 9. Competencia
+
+| Actor | Qué hace | Relación con Platita |
+|---|---|---|
+| **Tienda de Puntos** (Argentina) | Fidelización por puntos para pymes, sin app, por suscripción, con WhatsApp. Más de 1.000 marcas; próximo paso anunciado: México | Competidor más directo en modelo. Foco en puntos, no en saldo cargado |
+| **Pasito** (Argentina, en Uruguay desde jun-2026) | Puntos por caminar canjeables en comercios adheridos | Captación de clientes nuevos; puede ser complementario |
+| **Ahorra Fácil** (Uruguay) | Descuentos en comercios vía WhatsApp | Captación, no retención |
+| **Programas bancarios** (Itaú, OCA, Santander, Scotia, BBVA) | Puntos/millas por usar la tarjeta | Fidelizan al banco, no al comercio |
+
+**Diferenciación:** puntos y sellos ya es terreno competido. Lo que nadie ofrece es **la caja por adelantado**, un argumento más fuerte para un comercio chico que los puntos. Además, el saldo ya cargado por los clientes hace que el comercio no se cambie fácilmente.
+
+## 10. Riesgos
+
+| Riesgo | Mitigación |
+|---|---|
+| Regulatorio: que el saldo se interprete como dinero electrónico | Modelo cerrado (saldo de un solo comercio) y sin custodiar fondos |
+| Que Mercado Pago agregue algo parecido | Foco en fidelización y WhatsApp, que no priorizan |
+| Que Tienda de Puntos llegue a Uruguay o agregue saldo | Moverse rápido en pocos barrios y atar comercios con saldo cargado |
+| Adopción: que el comercio no lo empuje | Material listo: cartel de mostrador y QR |
+
+## 11. Validación en 4 semanas
+
+1. Conseguir 5 comercios y llevarles el saldo con una planilla y WhatsApp a mano (MVP "concierge").
+2. Medir cuántos clientes cargan saldo y cuánto vuelven.
+3. Al final, cobrar. **Si al menos 3 de los 5 pagan, se construye el producto.** Si no, se aprendió barato.
+
+Antes de empezar: preguntar a 10 comercios qué usan hoy para fidelizar. Sirve como investigación de competencia y como primera validación.
+
+---
+
+## 12. Backend (este repositorio)
+
+### Stack
+
+- Node + TypeScript, Fastify
+- PostgreSQL con Prisma
+- Montos en centésimos de peso (enteros)
+- Saldo calculado desde un libro mayor de movimientos (`Transaction`), nunca guardado suelto
+
+### Correr en local
+
+```bash
+cp .env.example .env
+docker compose up -d
+npm install
+npm run db:migrate
+npm run dev
+```
+
+### Endpoints
+
+| Método | Ruta | Qué hace |
+|---|---|---|
+| GET | `/health` | Chequeo de vida |
+| POST | `/merchants/:merchantId/customers` | Busca o crea cliente por teléfono |
+| GET | `/customers/:id/balance` | Saldo actual |
+| POST | `/customers/:id/topups` | Registra carga y aplica bonificación |
+| POST | `/customers/:id/charges` | Cobra descontando saldo |
+| GET | `/merchants/:merchantId/inactive?days=60` | Clientes inactivos para campañas |
+
+### Próximos pasos
+
+- [ ] Autenticación de comercios
+- [ ] ABM de comercios y reglas de bonificación
+- [ ] Mensaje de WhatsApp con el saldo después de cada uso
+- [ ] Envío de campañas a clientes inactivos
+- [ ] Tests

@@ -1,0 +1,69 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Comercio que usa la plataforma (cafetería, barbería, etc.)
+model Merchant {
+  id        String     @id @default(cuid())
+  name      String
+  phone     String?
+  plan      Plan       @default(BASIC)
+  createdAt DateTime   @default(now())
+  customers Customer[]
+  bonuses   BonusRule[]
+}
+
+enum Plan {
+  BASIC
+  PRO
+  MULTI
+}
+
+// Cliente final de un comercio. El saldo es cerrado: solo vale en ese comercio.
+model Customer {
+  id           String        @id @default(cuid())
+  merchantId   String
+  merchant     Merchant      @relation(fields: [merchantId], references: [id])
+  phone        String
+  name         String?
+  createdAt    DateTime      @default(now())
+  lastVisitAt  DateTime?
+  transactions Transaction[]
+
+  @@unique([merchantId, phone])
+}
+
+// Regla de bonificación: "cargá X y recibís X + bonus"
+model BonusRule {
+  id          String   @id @default(cuid())
+  merchantId  String
+  merchant    Merchant @relation(fields: [merchantId], references: [id])
+  minTopUp    Int      // en centésimos de peso
+  bonusAmount Int      // en centésimos de peso
+  active      Boolean  @default(true)
+}
+
+// Libro mayor: el saldo se calcula sumando movimientos, nunca se guarda suelto.
+// La plataforma NO custodia dinero: TOPUP solo registra un cobro que hizo el comercio.
+model Transaction {
+  id         String          @id @default(cuid())
+  customerId String
+  customer   Customer        @relation(fields: [customerId], references: [id])
+  type       TransactionType
+  amount     Int             // centésimos; positivo suma saldo, negativo resta
+  paidWith   String?         // "efectivo", "mercadopago", etc. (solo informativo)
+  note       String?
+  createdAt  DateTime        @default(now())
+}
+
+enum TransactionType {
+  TOPUP
+  BONUS
+  CHARGE
+  ADJUSTMENT
+}
