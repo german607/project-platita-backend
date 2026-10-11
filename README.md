@@ -140,8 +140,4 @@ npm run dev
 
 ### Próximos pasos
 
-- [ ] Autenticación de comercios
-- [ ] ABM de comercios y reglas de bonificación
-- [ ] Mensaje de WhatsApp con el saldo después de cada uso
-- [ ] Envío de campañas a clientes inactivos
-- [ ] Tests
+- Ver [TODO.md](TODO.md) para la lista completa por área
