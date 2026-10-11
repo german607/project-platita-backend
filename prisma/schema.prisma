@@ -36,6 +36,7 @@ model Customer {
   transactions Transaction[]
 
   @@unique([merchantId, phone])
+  @@index([merchantId, lastVisitAt])
 }
 
 // Regla de bonificación: "cargá X y recibís X + bonus"
@@ -46,6 +47,8 @@ model BonusRule {
   minTopUp    Int      // en centésimos de peso
   bonusAmount Int      // en centésimos de peso
   active      Boolean  @default(true)
+
+  @@index([merchantId, active])
 }
 
 // Libro mayor: el saldo se calcula sumando movimientos, nunca se guarda suelto.
@@ -59,6 +62,8 @@ model Transaction {
   paidWith   String?         // "efectivo", "mercadopago", etc. (solo informativo)
   note       String?
   createdAt  DateTime        @default(now())
+
+  @@index([customerId, createdAt])
 }
 
 enum TransactionType {
