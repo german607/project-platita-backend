@@ -2,7 +2,7 @@
 
 > Última actualización: 2026-10-11. Esto es una foto del presente, se
 > reescribe cuando deja de ser cierto — no es historial (eso es
-> [`CHANGELOG.md`](CHANGELOG.md)). Ver también [`BACKLOG.md`](BACKLOG.md)
+> [`CHANGELOG.md`](CHANGELOG.md)). Ver también [`../TODO.md`](../TODO.md)
 > y la regla de mantenimiento en [`AGENTS.md`](AGENTS.md).
 
 ## Qué es
@@ -18,12 +18,24 @@ registra el saldo.
 Desde 2026-10-11 el proyecto lleva su propio registro en `docs/`, con el
 mismo patrón que `iwant` y `cajon`: `CLAUDE.md` y `AGENTS.md` en la raíz
 apuntan a [`AGENTS.md`](AGENTS.md), que define la regla obligatoria
-(registrar cada cambio en `STATE`, `CHANGELOG` y `BACKLOG` en el mismo
+(registrar cada cambio en `STATE`, `CHANGELOG` y `TODO.md` en el mismo
 cambio) y el orden de lectura. Las reglas viven solo en `docs/AGENTS.md`.
-Se trabaja en la rama `jeronimo/contexto-y-docs`: el primer commit
-propio está en staging, pendiente de que el usuario lo haga desde su
-terminal (git firma con GPG, que la sesión de la IA no puede usar). Sin
-push.
+Se trabaja en la rama `jeronimo/contexto-y-docs` (commit `6c9388c` y,
+pendiente de commitear, el merge de `origin/dev`). Sin push. Git firma
+con GPG, que la sesión de la IA no puede usar: los commits los hace el
+usuario desde su terminal.
+
+**Trabajo de Germán Pereira (publicado en `origin/main` y `origin/dev`,
+2026-10-11):** `TODO.md` segmentado por área con prioridades P0/P1/P2,
+tres skills de roles en `.claude/skills/` (Product Owner, Backend
+Engineer, QA) y notas de sesión en `docs/sesiones/`. Se unificó con
+este sistema: `TODO.md` es **el único backlog** (se borró
+`docs/BACKLOG.md` y sus ítems se pasaron al TODO), la tabla de
+endpoints vive solo en `docs/BACKEND.md` (el README apunta ahí) y los
+skills y `docs/AGENTS.md` se refieren a los mismos archivos. Se
+tocaron los skills de Germán solo para corregir referencias
+desactualizadas (rutas, backlog); conviene que los revise. Falta
+acordar con Germán cuál es la rama de integración (`dev` o `main`).
 
 Limitación del entorno: la política de la organización (Cencosud) tiene
 Remote Control deshabilitado, así que no se pueden aprobar permisos
@@ -66,7 +78,7 @@ los endpoints en orden de uso; solo si `NODE_ENV !== "production"`.
 - **Escrito y sin verificar en ejecución**: los endpoints nuevos, el
   bloqueo de cobros simultáneos, la normalización de teléfonos y la
   paginación. No se recorrió el flujo completo. Ver la lista "Verificar
-  primero" en [`BACKLOG.md`](BACKLOG.md).
+  primero" del [`TODO`](../TODO.md) (los ítems `[~]`).
 
 ## No existe todavía
 

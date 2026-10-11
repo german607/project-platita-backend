@@ -208,7 +208,7 @@ Juancito no volvió. Pablo quiere recuperarlo.
 Con esa lista, Pablo (o más adelante la plataforma, con un clic) le
 mandaría a Juancito una promo por WhatsApp. **Esa parte todavía no
 existe**: es el siguiente módulo a construir (ver
-[`BACKLOG.md`](BACKLOG.md)).
+[`TODO.md`](../TODO.md)).
 
 ---
 

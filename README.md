@@ -127,21 +127,18 @@ npm run db:migrate
 npm run dev
 ```
 
-### Endpoints
+Con el servidor arriba, `http://localhost:3000/dev` abre una consola de
+pruebas para probar todos los endpoints desde el navegador (solo fuera de
+producción). Si el puerto 3000 está ocupado: `PORT=3001 npm run dev`.
 
-| Método | Ruta | Qué hace |
-|---|---|---|
-| GET | `/health` | Chequeo de vida |
-| POST | `/merchants/:merchantId/customers` | Busca o crea cliente por teléfono |
-| GET | `/customers/:id/balance` | Saldo actual |
-| POST | `/customers/:id/topups` | Registra carga y aplica bonificación |
-| POST | `/customers/:id/charges` | Cobra descontando saldo |
-| GET | `/merchants/:merchantId/inactive?days=60` | Clientes inactivos para campañas |
+### Endpoints y documentación técnica
+
+La tabla de endpoints, la arquitectura del backend y las reglas del
+dominio viven en [`docs/BACKEND.md`](docs/BACKEND.md) (una sola copia, para
+que no se desactualice). Un caso de uso narrado que pasa por todos los
+endpoints está en [`docs/EJEMPLO.md`](docs/EJEMPLO.md). El estado actual
+del proyecto, en [`docs/STATE.md`](docs/STATE.md).
 
 ### Próximos pasos
 
-- [ ] Autenticación de comercios
-- [ ] ABM de comercios y reglas de bonificación
-- [ ] Mensaje de WhatsApp con el saldo después de cada uso
-- [ ] Envío de campañas a clientes inactivos
-- [ ] Tests
+- Ver [TODO.md](TODO.md) para la lista completa por área

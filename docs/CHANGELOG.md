@@ -91,3 +91,21 @@ regla de mantenimiento en [`AGENTS.md`](AGENTS.md).
   consola `/dev` y migraciones). El commit falló desde la sesión de la IA
   porque git firma con GPG y el entorno no puede leer `~/.gnupg`; lo
   tiene que hacer el usuario desde su terminal. Sin push.
+- Se bajó el trabajo de Germán Pereira (`origin/dev`: `TODO.md`, skills de
+  roles, `docs/sesiones/`; `origin/main`: `TODO.md` y README) y se
+  unificó con este sistema de documentación en el merge de `origin/dev`
+  sobre la rama `jeronimo/contexto-y-docs`:
+  - `TODO.md` pasó a ser el único backlog; `docs/BACKLOG.md` se borró
+    (su historial queda en git) y sus ítems pendientes se pasaron al
+    TODO. Se marcó lo ya implementado (`[x]` lo verificado, `[~]` lo
+    implementado sin verificar corriéndolo).
+  - La tabla de endpoints del README se reemplazó por un link a
+    `docs/BACKEND.md`, para tener una sola copia.
+  - `docs/AGENTS.md`, `CLAUDE.md` y `AGENTS.md` ahora apuntan a
+    `TODO.md`, mencionan los skills de roles y las notas de sesión.
+  - Se corrigieron en los skills de Germán las referencias a
+    `src/routes/*`, al backlog y al README como lugar de la tabla de
+    endpoints.
+  - `docs/sesiones/2026-10-11.md` quedó como lo escribió Germán; su tabla
+    de fallas menciona `src/routes/customers.ts`, que ya no existe (las
+    dos fallas críticas fueron atendidas: ver `TODO.md` §3).
