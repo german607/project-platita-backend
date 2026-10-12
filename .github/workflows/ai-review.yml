@@ -1,0 +1,118 @@
+# Revisión con IA: Claude revisa cada PR hacia dev o main con las reglas del
+# proyecto (docs/AGENTS.md y los roles de .claude/skills/), deja comentarios
+# en el PR y falla el check si encuentra problemas que bloquean el merge.
+# Configuración (secret y protección de ramas) en docs/CI.md.
+name: Revisión IA
+
+on:
+  pull_request:
+    branches: [dev, main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Revisión de Claude
+    # Los borradores no se revisan: se revisan al marcarlos como listos.
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Revisar el PR
+        id: review
+        uses: anthropics/claude-code-action@v1
+        with:
+          # Se usa el secret que esté configurado (uno de los dos alcanza).
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR: #${{ github.event.pull_request.number }}
+            RAMA: ${{ github.head_ref }} -> ${{ github.base_ref }}
+            COMMIT: ${{ github.event.pull_request.head.sha }}
+
+            Sos el revisor de código de Platita (saldo prepago para comercios de
+            barrio en Uruguay). Respondé en español.
+
+            Antes de revisar, leé:
+            - docs/AGENTS.md (reglas obligatorias del proyecto)
+            - .claude/skills/platita-backend-engineer/SKILL.md (reglas de dominio y criterios de revisión)
+            - .claude/skills/platita-qa/SKILL.md (áreas de riesgo)
+            - docs/STATE.md y docs/BACKEND.md si el PR toca código
+
+            Mirá los cambios con `gh pr diff ${{ github.event.pull_request.number }}`
+            y abrí los archivos que necesites para entender el contexto.
+
+            BLOQUEAN el merge (cuentan en `bloqueantes`):
+            1. Montos de dinero con float o decimales en vez de centésimos enteros.
+            2. Movimientos del libro mayor (Transaction) editados o borrados, o un saldo guardado suelto.
+            3. Consultas u operaciones sobre clientes o movimientos que no se acotan al comercio correspondiente.
+            4. Chequeo de saldo y cobro fuera de una misma transacción con bloqueo (riesgo de sobregiro).
+            5. Cualquier cambio que haga que la plataforma reciba o guarde dinero de clientes finales.
+            6. Secretos, tokens o contraseñas en el código, o logueados.
+            7. Entrada de usuario sin validar con zod en un endpoint.
+            8. Cambios en prisma/schema.prisma sin la migración correspondiente.
+            9. Cambios en src/ o prisma/ sin la entrada correspondiente en docs/CHANGELOG.md
+               (regla obligatoria de docs/AGENTS.md).
+            10. Errores de lógica que rompen un flujo existente.
+
+            NO bloquean (van como sugerencias): estilo, nombres, falta de tests,
+            mejoras de rendimiento menores, documentación incompleta fuera del punto 9.
+
+            Si el PR va hacia main, además indicá en el resumen si `docs/STATE.md`
+            deja cosas sin verificar (`[~]` en TODO.md) que conviene probar antes de
+            publicar. Eso no bloquea.
+
+            Cómo responder:
+            - Por cada problema concreto, dejá un comentario en la línea con
+              mcp__github_inline_comment__create_inline_comment, empezando con
+              **[Bloqueante]** o **[Sugerencia]**, con el escenario que falla y el arreglo.
+            - Al final, publicá UN comentario de resumen con
+              `gh pr comment ${{ github.event.pull_request.number }} --body "..."` que empiece con
+              "## Revisión IA — <commit corto>", diga el veredicto (✅ Aprobado o
+              ❌ Cambios requeridos), liste los bloqueantes y las sugerencias principales.
+            - No apruebes por compromiso: si no hay bloqueantes, el veredicto es aprobar
+              aunque haya sugerencias; si hay al menos uno, es cambios_requeridos.
+
+          claude_args: |
+            --max-turns 40
+            --allowedTools "Read,Grep,Glob,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*),Bash(git diff:*),Bash(git log:*),mcp__github_inline_comment__create_inline_comment"
+            --json-schema '{"type":"object","properties":{"veredicto":{"type":"string","enum":["aprobar","cambios_requeridos"]},"bloqueantes":{"type":"integer","minimum":0},"resumen":{"type":"string"}},"required":["veredicto","bloqueantes","resumen"]}'
+
+      - name: Aplicar el veredicto
+        if: always()
+        env:
+          # Se pasa por variable de entorno (nunca interpolado en el script)
+          # porque el texto lo escribe la IA.
+          RESULTADO: ${{ steps.review.outputs.structured_output }}
+        run: |
+          if [ -z "$RESULTADO" ]; then
+            echo "::error::La revisión de IA no terminó o no devolvió veredicto. Revisá el log del paso anterior (¿falta el secret ANTHROPIC_API_KEY o CLAUDE_CODE_OAUTH_TOKEN?)."
+            exit 1
+          fi
+          VEREDICTO=$(echo "$RESULTADO" | jq -r '.veredicto')
+          BLOQUEANTES=$(echo "$RESULTADO" | jq -r '.bloqueantes')
+          {
+            echo "## Revisión IA"
+            echo
+            echo "**Veredicto:** $VEREDICTO · **Bloqueantes:** $BLOQUEANTES"
+            echo
+            echo "$RESULTADO" | jq -r '.resumen'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$VEREDICTO" != "aprobar" ] || [ "$BLOQUEANTES" != "0" ]; then
+            echo "::error::La revisión de IA encontró $BLOQUEANTES problema(s) bloqueante(s). Ver los comentarios del PR."
+            exit 1
+          fi
+          echo "Aprobado por la revisión de IA."

@@ -104,8 +104,11 @@ Este es el **único backlog** del proyecto (ver `docs/AGENTS.md`). El estado gen
 ## 9. Infraestructura y despliegue (Backend)
 
 - [ ] **P0** Dockerfile de la API
-- [ ] **P0** CI en GitHub Actions: lint, typecheck, tests
-- [ ] **P1** Despliegue en un proveedor barato (Railway, Render o Fly.io) + Postgres gestionado
+- [~] **P0** CI en GitHub Actions: typecheck, migraciones, drift de schema, arranque y tests (`ci.yml`; ver `docs/CI.md`). Escrito y validado con actionlint; falta la primera corrida en GitHub
+- [~] **P0** Revisión con IA en cada PR a `dev`/`main` que bloquea el merge si hay problemas graves (`ai-review.yml`). Falta la primera corrida en GitHub
+- [ ] **P0** Configurar en GitHub el secret de Claude (`CLAUDE_CODE_OAUTH_TOKEN` o `ANTHROPIC_API_KEY`) y la protección de ramas de `dev` y `main` (pasos en `docs/CI.md`)
+- [ ] **P1** Lint (ESLint) como paso del CI
+- [ ] **P1** Despliegue en un proveedor barato (Railway, Render o Fly.io) + Postgres gestionado, automático desde `main` después del CI (CD)
 - [ ] **P1** Backups automáticos de la base
 - [ ] **P2** Monitoreo y alertas
 
