@@ -109,3 +109,10 @@ regla de mantenimiento en [`AGENTS.md`](AGENTS.md).
   - `docs/sesiones/2026-10-11.md` quedó como lo escribió Germán; su tabla
     de fallas menciona `src/routes/customers.ts`, que ya no existe (las
     dos fallas críticas fueron atendidas: ver `TODO.md` §3).
+- Aclaración sobre la entrada anterior del commit: el repo **no** necesita
+  firma GPG. La firma de `~/.gitconfig` (clave de trabajo) no aplica a
+  `~/antes_proyecto/`, que usa `~/.gitconfig-personal` con
+  `commit.gpgsign false`; los commits `6c9388c` y `a7dfce0` están sin
+  firmar y con la identidad personal. El fallo inicial se produjo cuando
+  la configuración del repo todavía resolvía la firma activada. Con la
+  configuración actual la IA puede commitear.

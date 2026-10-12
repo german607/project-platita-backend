@@ -20,10 +20,11 @@ mismo patrón que `iwant` y `cajon`: `CLAUDE.md` y `AGENTS.md` en la raíz
 apuntan a [`AGENTS.md`](AGENTS.md), que define la regla obligatoria
 (registrar cada cambio en `STATE`, `CHANGELOG` y `TODO.md` en el mismo
 cambio) y el orden de lectura. Las reglas viven solo en `docs/AGENTS.md`.
-Se trabaja en la rama `jeronimo/contexto-y-docs` (commit `6c9388c` y,
-pendiente de commitear, el merge de `origin/dev`). Sin push. Git firma
-con GPG, que la sesión de la IA no puede usar: los commits los hace el
-usuario desde su terminal.
+Se trabaja en la rama `jeronimo/contexto-y-docs` (commits `6c9388c` y
+`a7dfce0`, este último el merge de `origin/dev`). Sin push. Este repo
+no firma commits (`commit.gpgsign false`, con la identidad personal vía
+`~/.gitconfig-personal`); la firma GPG de la configuración global solo
+aplica fuera de las carpetas personales.
 
 **Trabajo de Germán Pereira (publicado en `origin/main` y `origin/dev`,
 2026-10-11):** `TODO.md` segmentado por área con prioridades P0/P1/P2,
