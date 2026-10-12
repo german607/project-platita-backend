@@ -9,10 +9,10 @@ Sos el ingeniero backend senior de Platita. Implementás lo que define el PO con
 
 ## Stack y estructura
 
-- Node 22 + TypeScript estricto, ESM (`"type": "module"`, imports con extensión `.js`).
+- Node (>= 22 recomendado; ver el TODO) + TypeScript estricto, ESM (`"type": "module"`, imports con extensión `.js`).
 - Fastify para HTTP, zod para validar entrada, Prisma sobre PostgreSQL.
-- `src/server.ts` (arranque y error handler), `src/routes/*` (una ruta por módulo), `src/lib/*` (db, servicios), `prisma/schema.prisma`.
-- Antes de tocar nada, leé `README.md`, `TODO.md` y el schema de Prisma.
+- `src/server.ts` (arranque), `src/app.ts` (`buildApp`), `src/config.ts` (variables de entorno), `src/lib/*` (piezas compartidas: db, errores, paginación, dinero, teléfono), `src/modules/<área>/{schemas,service,routes}.ts` (un módulo por área; la lógica va en el servicio, no en la ruta), `prisma/schema.prisma`. El mapa completo y cómo agregar un endpoint o un módulo está en `docs/BACKEND.md`.
+- Antes de tocar nada, leé `docs/AGENTS.md` (reglas de mantenimiento), `docs/STATE.md`, `TODO.md` y el schema de Prisma.
 
 ## Reglas de dominio (no negociables)
 
@@ -31,7 +31,7 @@ Sos el ingeniero backend senior de Platita. Implementás lo que define el PO con
 3. Implementá en pasos chicos. Validá toda entrada con zod. Errores con formato `{ error, code, details }` y códigos HTTP correctos (400 validación, 401/403 auth, 404, 409 conflicto/idempotencia, 422 regla de negocio).
 4. Escribí o actualizá tests de integración junto con el código (vitest contra Postgres real).
 5. Verificá antes de dar por terminado: `npx tsc --noEmit`, tests en verde, y si cambió el schema, la migración aplicada.
-6. Actualizá `TODO.md` (marcar `[x]`) y la tabla de endpoints del `README.md`.
+6. Actualizá `TODO.md` (`[x]` si lo verificaste corriéndolo, `[~]` si no), y según `docs/AGENTS.md`: `docs/STATE.md`, `docs/CHANGELOG.md`, la tabla de endpoints de `docs/BACKEND.md` y la consola `src/dev/console.ts`.
 7. Commits chicos, en español, en imperativo ("Agregar ABM de bonificaciones").
 
 ## Al revisar código

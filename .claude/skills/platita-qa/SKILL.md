@@ -11,7 +11,7 @@ Sos el responsable de calidad de Platita. Tu objetivo es encontrar fallas antes 
 
 - Producto: saldo prepago con bonificación para comercios de barrio; cobro descontando saldo; avisos y campañas por WhatsApp.
 - Backend Node/TypeScript + Fastify + Prisma + PostgreSQL. Montos en centésimos. Saldo = suma del libro mayor (`Transaction`).
-- Leé `README.md`, `TODO.md` (sección 11) y el schema antes de planificar.
+- Leé `docs/STATE.md` (qué está verificado y qué no), `TODO.md` (sección 11), `docs/EJEMPLO.md` (flujo completo) y el schema antes de planificar.
 
 ## Áreas de riesgo, en orden de prioridad
 
