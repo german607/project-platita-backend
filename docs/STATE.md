@@ -1,6 +1,6 @@
 # Estado actual — Platita
 
-> Última actualización: 2026-10-12. Esto es una foto del presente, se
+> Última actualización: 2026-10-13. Esto es una foto del presente, se
 > reescribe cuando deja de ser cierto — no es historial (eso es
 > [`CHANGELOG.md`](CHANGELOG.md)). Ver también [`../TODO.md`](../TODO.md)
 > y la regla de mantenimiento en [`AGENTS.md`](AGENTS.md).
@@ -20,8 +20,9 @@ mismo patrón que `iwant` y `cajon`: `CLAUDE.md` y `AGENTS.md` en la raíz
 apuntan a [`AGENTS.md`](AGENTS.md), que define la regla obligatoria
 (registrar cada cambio en `STATE`, `CHANGELOG` y `TODO.md` en el mismo
 cambio) y el orden de lectura. Las reglas viven solo en `docs/AGENTS.md`.
-Se trabaja en la rama `jeronimo/contexto-y-docs` (commits `6c9388c` y
-`a7dfce0`, este último el merge de `origin/dev`). Sin push. Este repo
+La rama `jeronimo/contexto-y-docs` ya se mergeó en `dev` (PR #1) y se
+borró en local. Se trabaja en `jeronimo/reajustes-para-front`, creada
+desde `origin/dev` (2026-10-13), sin push. Este repo
 no firma commits (`commit.gpgsign false`, con la identidad personal vía
 `~/.gitconfig-personal`); la firma GPG de la configuración global solo
 aplica fuera de las carpetas personales.
@@ -80,12 +81,45 @@ la API y cómo agregar endpoints o módulos está en
 [`BACKEND.md`](BACKEND.md).
 
 Endpoints: comercios (alta, listado, detalle, edición), reglas de
-bonificación (alta, listado, edición/desactivación), clientes (alta por
-teléfono, listado con saldo, detalle, edición, saldo, inactivos) y libro
-mayor (carga con bono, cobro, ajuste, movimientos).
+bonificación (alta, listado con `timesUsed`, edición/desactivación, vista
+previa del bono), clientes (alta por teléfono, listado con saldo y
+búsqueda normalizada, detalle, edición, saldo, inactivos con saldo y
+total) y libro mayor (carga con bono, cobro, ajuste, movimientos del
+cliente y movimientos de todo el comercio). Cargas, cobros y ajustes
+aceptan un header `Idempotency-Key` **opcional**.
+
+**Pedido del frontend atendido (2026-10-13):** idempotencia opcional,
+CORS por `CORS_ORIGINS`, búsqueda por teléfono normalizada y `?phone=`,
+movimientos del comercio, saldo y total en inactivos, vista previa del
+bono, `bonusRuleId` en los bonos, `name`/`description`/`timesUsed` en las
+promos. **Decidido no hacer por ahora:** autenticación de comercios
+(se posterga, no se toca) y unificar unidades (deuda técnica aceptada:
+la API sigue recibiendo pesos y devolviendo centésimos). WhatsApp a
+inactivos sigue sin construirse. Todo esto está **escrito pero sin
+verificar corriéndolo** (ver abajo).
 
 Consola de pruebas local en `GET /dev` (`src/dev/console.ts`), con todos
 los endpoints en orden de uso; solo si `NODE_ENV !== "production"`.
+
+### Puerto y despliegue
+
+La API escucha en `PORT` (default 3000, `0.0.0.0`). En esta máquina el
+3000 lo ocupa `iwant-backend` (`~/iwant/iwant-backend`), por lo que
+`npm run dev` falla con `EADDRINUSE` (2026-10-13). No es un bug del
+código: se corre con `PORT=3001 npm run dev` (o `PORT=3001` en el `.env`,
+que no se versiona). No se mata el proceso de `iwant`.
+**Verificado por el usuario (2026-10-13):** con `PORT=3001` el servidor
+levanta y `GET /dev` responde 200. En la misma corrida `POST /merchants`
+dio 500 (`PrismaClientInitializationError`, no alcanza `localhost:5432`):
+Postgres no estaba levantado. Se levanta con `docker compose up -d` y
+`npm run db:migrate` (README). Pendiente de confirmar que con la base
+arriba el flujo anda.
+
+**CORS:** `@fastify/cors` está en `package.json` y se activa solo si
+`CORS_ORIGINS` (lista separada por comas, validada en `src/config.ts`)
+no está vacía; nunca `*`. Falta `npm install` en cada máquina y probarlo
+con el frontend. Hay que sumar la variable a `.env.example` (no pudo
+editarlo la IA por una restricción del entorno).
 
 ### Qué está verificado y qué no
 
@@ -96,6 +130,16 @@ los endpoints en orden de uso; solo si `NODE_ENV !== "production"`.
   así que Platita se corre con `PORT=3001`.
 - **Verificado después del refactor**: `tsc --noEmit` pasa sin errores
   y la migración de los índices (`segunda_parte`) se aplicó.
+- **Verificado el 2026-10-13 (por el usuario)**: `npm install`
+  (instaló `@fastify/cors`), `npm run db:migrate` aplicó
+  `20261013150000_idempotencia_y_origen_de_bonos` y Prisma informa la base
+  en sync con el esquema (el SQL escrito a mano coincide), y `tsc
+  --noEmit` no mostró errores. **Sigue sin correrse** la lógica nueva
+  (idempotencia, vista previa, movimientos del comercio, búsqueda por
+  teléfono, inactivos, CORS).
+- **Aviso de Node:** `@fastify/cors` trae `cookie@2.0.1`, que pide Node
+  >= 22; esta máquina tiene 20.12.2 y anda con un warning `EBADENGINE`.
+  Ver el pendiente de versión mínima de Node en `TODO.md` §1.
 - **Escrito y sin verificar en ejecución**: los endpoints nuevos, el
   bloqueo de cobros simultáneos, la normalización de teléfonos y la
   paginación. No se recorrió el flujo completo. Ver la lista "Verificar
@@ -103,7 +147,7 @@ los endpoints en orden de uso; solo si `NODE_ENV !== "production"`.
 
 ## No existe todavía
 
-- Autenticación de comercios (hoy cualquiera con un id puede operar).
+- Autenticación de comercios (hoy cualquiera con un id puede operar; postergada a propósito).
 - WhatsApp (mensaje de saldo y campañas).
 - Frontend / panel del mostrador, QR.
 - Tests.
@@ -115,6 +159,6 @@ los endpoints en orden de uso; solo si `NODE_ENV !== "production"`.
   cierra). Pendiente de abogado y contador.
 - Cuánto backend construir antes de validar con el concierge del README
   §10.
-- La API recibe pesos y devuelve centésimos; ver si se unifica.
+- La API recibe pesos y devuelve centésimos: deuda técnica aceptada, se unifica más adelante en un cambio coordinado con el frontend.
 - El usuario manifestó dudas sobre partes del plan (a precisar en la
   próxima sesión); cuando se concreten, registrarlas acá.

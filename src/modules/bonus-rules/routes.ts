@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { idParams, merchantIdParams } from "../../lib/schemas.js";
-import { createBonusRuleBody, updateBonusRuleBody } from "./schemas.js";
-import { createBonusRule, listBonusRules, updateBonusRule } from "./service.js";
+import { bonusPreviewQuery, createBonusRuleBody, updateBonusRuleBody } from "./schemas.js";
+import { createBonusRule, listBonusRules, previewBonus, updateBonusRule } from "./service.js";
 
 export async function bonusRuleRoutes(app: FastifyInstance) {
   app.post("/merchants/:merchantId/bonus-rules", async (req, reply) => {
@@ -13,6 +13,12 @@ export async function bonusRuleRoutes(app: FastifyInstance) {
   app.get("/merchants/:merchantId/bonus-rules", async (req) =>
     listBonusRules(merchantIdParams.parse(req.params).merchantId),
   );
+
+  // Vista previa del bono de una carga (no registra nada)
+  app.get("/merchants/:merchantId/bonus-preview", async (req) => {
+    const { merchantId } = merchantIdParams.parse(req.params);
+    return previewBonus(merchantId, bonusPreviewQuery.parse(req.query));
+  });
 
   app.patch("/bonus-rules/:id", async (req) => {
     const { id } = idParams.parse(req.params);

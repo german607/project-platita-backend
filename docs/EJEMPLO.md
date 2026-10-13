@@ -58,9 +58,12 @@ y Pablo lo corrige. También quiere ver cómo quedó la ficha.
 > ▶ **`POST /merchants/m_pablo/bonus-rules`**: crea la regla "cargando
 > $1.000 o más, te regalo $200".
 > ```json
-> { "minTopUp": 1000, "bonusAmount": 200 }
+> { "minTopUp": 1000, "bonusAmount": 200, "name": "Promo 3 cortes" }
 > ```
-> → `201 { "id": "r_promo3", "minTopUp": 100000, "bonusAmount": 20000, "active": true }`
+> → `201 { "id": "r_promo3", "name": "Promo 3 cortes", "minTopUp": 100000, "bonusAmount": 20000, "active": true, "timesUsed": 0 }`
+>
+> (`name` y `description` son opcionales; `timesUsed` es cuántos bonos
+> salieron de esta regla.)
 
 A Pablo se le ocurre una segunda promo de $500 con $50 de regalo. Al
 rato se arrepiente. Las reglas no se borran, se apagan.
@@ -105,8 +108,18 @@ Juancito le da los $1.000 en efectivo a Pablo. **Platita no toca esa
 plata**: queda en la caja de la peluquería. Platita solo anota que ahora
 Juancito tiene saldo.
 
+Antes de confirmar, la pantalla le muestra a Pablo cuánto regalo
+corresponde, sin registrar nada:
+
+> ▶ **`GET /merchants/m_pablo/bonus-preview?amount=1000`**: vista previa
+> del bono.
+> → `{ "amount": 100000, "rule": { "id": "r_promo3", "name": "Promo 3 cortes", ... }, "bonus": 20000, "total": 120000 }`
+> (si ninguna promo alcanza: `rule: null`, `bonus: 0`).
+
 > ▶ **`POST /customers/c_juancito/topups`**: registra la carga. El
 > sistema aplica solo la promo, porque $1.000 llega al mínimo de la regla.
+> El header opcional `Idempotency-Key: carga-001` protege contra un
+> reintento: si la conexión se corta y se reenvía, no se duplica.
 > ```json
 > { "amount": 1000, "paidWith": "efectivo" }
 > ```
@@ -114,10 +127,12 @@ Juancito tiene saldo.
 > ```json
 > {
 >   "topup":   { "type": "TOPUP", "amount": 100000 },
->   "bonus":   { "type": "BONUS", "amount": 20000 },
+>   "bonus":   { "type": "BONUS", "amount": 20000, "bonusRuleId": "r_promo3" },
 >   "balance": 120000
 > }
 > ```
+> Reenviar lo mismo con la misma clave devuelve esta respuesta con el
+> header `Idempotent-Replayed: true` y no registra nada nuevo.
 
 Saldo: **$1.200**, justo tres cortes. Juancito quiere confirmarlo:
 
@@ -142,7 +157,8 @@ Saldo: **$1.200**, justo tres cortes. Juancito quiere confirmarlo:
 
 Esa tarde la recepcionista, nerviosa, aprieta el botón dos veces. El
 segundo cobro ya salió y Juancito quedó en $0 habiendo pagado un corte
-de más.
+de más. (Con `Idempotency-Key` el doble toque no habría duplicado nada;
+acá la pantalla no mandó clave y por eso se registró dos veces.)
 
 > ▶ **`POST /customers/c_juancito/charges`** (por error, otra vez $400):
 > `balance: 0`.
@@ -195,7 +211,18 @@ movimiento.
 > Todo suma 0. Con `?type=CHARGE` ve solo los cobros.
 
 > ▶ **`GET /merchants/m_pablo/customers?search=juan`**: busca a Juancito
-> en su lista de clientes. Cada cliente viene con su saldo.
+> en su lista de clientes. Cada cliente viene con su saldo. `search`
+> también entiende teléfonos en cualquier formato (`?search=099123456`
+> encuentra a `+59899123456`), y `?phone=099123456` busca el teléfono
+> exacto sin crear nada.
+
+Y a fin de día mira todo lo que pasó en el mostrador, de todos sus
+clientes:
+
+> ▶ **`GET /merchants/m_pablo/transactions?from=2026-10-13T00:00:00-03:00&to=2026-10-14T00:00:00-03:00`**:
+> los movimientos del día, del más nuevo al más viejo, cada uno con el
+> `customer` (`id`, `name`, `phone`). `from` es inclusivo y `to`
+> exclusivo.
 
 ## Escena 8: dos meses después
 
@@ -203,7 +230,9 @@ Juancito no volvió. Pablo quiere recuperarlo.
 
 > ▶ **`GET /merchants/m_pablo/inactive?days=60`**: lista los clientes que
 > no vienen hace 60 días o más.
-> → `{ "data": [ { "id": "c_juancito", ... } ], "nextCursor": null }`
+> → `{ "data": [ { "id": "c_juancito", "balance": 0, ... } ], "nextCursor": null, "total": 1 }`
+> (cada cliente trae su saldo; `total` cuenta todos los inactivos, no
+> solo los de esta página).
 
 Con esa lista, Pablo (o más adelante la plataforma, con un clic) le
 mandaría a Juancito una promo por WhatsApp. **Esa parte todavía no
@@ -234,12 +263,14 @@ existe**: es el siguiente módulo a construir (ver
 | 16 | `GET /customers/:id/transactions` | Historial de movimientos | 7 |
 | 17 | `GET /merchants/:id/customers` | Buscar clientes con su saldo | 7 |
 | 18 | `GET /merchants/:id/inactive` | Clientes a reactivar | 8 |
+| 19 | `GET /merchants/:id/bonus-preview` | Ver el bono antes de cargar | 4 |
+| 20 | `GET /merchants/:id/transactions` | Movimientos del día del comercio | 7 |
 
 ## Lo que el cuento deja ver que falta
 
 - **Login:** hoy cualquiera que conozca `c_juancito` podría cobrarle.
   Falta la autenticación.
-- **Un cobro repetido por mala señal:** si el celular reenvía el cobro,
-  se duplica. La corrección manual de la escena 5 es la salida actual, y
-  lo ideal sería que no pase (idempotencia, en el backlog).
+- **Un cobro repetido por mala señal:** la idempotencia existe pero es
+  opcional: solo protege si la pantalla manda `Idempotency-Key`. Sin
+  clave, un reenvío se duplica y se corrige con un ajuste (escena 5).
 - **El WhatsApp de la escena 8** no está construido.

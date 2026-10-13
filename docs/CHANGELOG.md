@@ -178,3 +178,85 @@ regla de mantenimiento en [`AGENTS.md`](AGENTS.md).
     porque los logs no siempre se pueden abrir desde donde se diagnostica.
   - Probado en local con `gh` simulado: sin registro, error de credencial,
     aprobado, cambios requeridos y workflow modificado.
+
+## 2026-10-13
+
+- `npm run dev` falló con `EADDRINUSE` en `0.0.0.0:3000`. Causa: el puerto
+  lo tiene `iwant-backend` (proceso node con cwd `~/iwant/iwant-backend`),
+  no Platita. No se tocó código ni se mató el proceso ajeno; la solución
+  es correr `PORT=3001 npm run dev` (ya documentado en el README). No se
+  pudo verificar corriéndolo: el entorno de la IA no pudo levantar el
+  servidor.
+- Se anotó en `STATE.md` (sección "Puerto y despliegue") y en `TODO.md`
+  §9. Sobre CORS: no está configurado y hoy no hace falta; se detalló en
+  `STATE.md` y en `TODO.md` §10 qué hacer cuando haya frontend en otro
+  origen. `.env` y `.env.example` no se editaron (el entorno no los
+  deja tocar).
+
+## 2026-10-13 (continuación)
+
+- El usuario corrió `PORT=3001 npm run dev`: el servidor levanta y `/dev`
+  responde 200, con lo que la solución del puerto queda verificada. Un
+  `POST /merchants` desde la consola devolvió 500 por
+  `PrismaClientInitializationError`: Postgres no estaba corriendo en
+  `localhost:5432`. No es un error de código; hay que levantar la base
+  con `docker compose up -d` y aplicar `npm run db:migrate`. La IA no
+  pudo hacerlo (sin acceso al socket de Docker en su entorno).
+- Mejora pendiente (no hecha): que un fallo de conexión a la base
+  devuelva 503 con un mensaje claro en vez de 500 genérico.
+
+- Rama de trabajo renombrada a `jeronimo/reajustes-para-front` (desde
+  `origin/dev`). Se borró en local `jeronimo/contexto-y-docs`, ya mergeada
+  en `dev`. Las ramas remotas de `feature/*` no se tocaron.
+
+## 2026-10-13 (pedido del frontend)
+
+El frontend (repo `project-platita-frontend`) pidió completar el diseño.
+Se implementó, **sin poder compilar ni correr nada** (el entorno de la IA
+no pudo ejecutar `tsc`, Prisma ni el servidor; todo se revisó leyendo):
+
+- **Idempotencia opcional** en `POST /customers/:id/topups`, `/charges` y
+  `/adjustments` con el header `Idempotency-Key`. Tabla nueva
+  `IdempotencyKey` (único por cliente + clave, hash de operación y cuerpo,
+  respuesta JSON, vence a las 48 h, limpieza horaria en `server.ts`). La
+  clave se escribe en la misma transacción que el movimiento y con la fila
+  del cliente bloqueada, así los pedidos simultáneos se serializan. Misma
+  clave y cuerpo: respuesta guardada (201) con `Idempotent-Replayed:
+  true`; otro cuerpo u operación: 422 `IDEMPOTENCY_KEY_REUSED`; los errores
+  no se guardan. La carga ahora también bloquea la fila del cliente.
+- **CORS** con `@fastify/cors` (agregado a `package.json`, falta `npm
+  install`) y `CORS_ORIGINS` en `src/config.ts`.
+- **Búsqueda de clientes**: `?search=` normaliza teléfonos (antes
+  `099123456` no encontraba `+59899123456`) y `?phone=` filtra exacto sin
+  crear. Helper `phoneSearchFragment` en `src/lib/phone.ts`.
+- **`GET /merchants/:id/transactions?from&to&type`**: movimientos de todo el
+  comercio con el cliente en cada fila (`from` inclusivo, `to` exclusivo).
+- **`/inactive`** ahora trae `balance` por cliente y `total`.
+- **`GET /merchants/:id/bonus-preview?amount=`**; la selección de la regla
+  pasó a `findApplicableRule` (bonus-rules/service.ts), usada también por la
+  carga real.
+- **Bonos**: `Transaction.bonusRuleId`; `BonusRule.name` y `description`
+  opcionales; `timesUsed` en el listado, alta y edición de reglas. Los
+  bonos anteriores quedan con `bonusRuleId` nulo y no cuentan en
+  `timesUsed`.
+- Migración escrita a mano: `20261013150000_idempotencia_y_origen_de_bonos`.
+- Consola `/dev`: campo `Idempotency-Key` y los endpoints nuevos.
+- **No se hizo, a pedido del usuario:** autenticación (se posterga, no se
+  tocó nada) y unificar unidades (deuda técnica documentada). WhatsApp a
+  inactivos queda pendiente.
+- Contrato existente sin cambios: listados `{ data, nextCursor }`, errores
+  `{ error, code, details }`, 422 `INSUFFICIENT_BALANCE` con `details {
+  balance, needed }`, montos en pesos de entrada y centésimos de salida.
+  Cambios de forma, todos aditivos: `balance` en cada item de `/inactive`,
+  `total` en `/inactive`, `name`/`description`/`timesUsed` en las reglas,
+  `bonusRuleId` en los movimientos BONUS.
+
+## 2026-10-13 (verificación parcial)
+
+- El usuario corrió `npm install`, `npm run db:migrate` y `tsc --noEmit`: la
+  migración `20261013150000_idempotencia_y_origen_de_bonos` se aplicó y
+  Prisma informa la base en sync (el SQL escrito a mano coincide con el
+  esquema); `tsc` no mostró errores. La lógica nueva sigue sin correrse.
+- `npm install` avisó `EBADENGINE`: `cookie@2.0.1` (vía `@fastify/cors`)
+  pide Node >= 22 y la máquina tiene 20.12.2. No bloquea; refuerza el
+  pendiente de fijar la versión de Node.

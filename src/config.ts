@@ -12,6 +12,18 @@ const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(3000),
   DATABASE_URL: z.string().min(1),
+  // Orígenes del frontend autorizados a llamar a la API desde el navegador,
+  // separados por coma (ej. "https://app.platita.uy,http://localhost:5173").
+  // Vacío = no se habilita CORS (solo mismo origen o proxy).
+  CORS_ORIGINS: z
+    .string()
+    .default("")
+    .transform((value) =>
+      value
+        .split(",")
+        .map((origin) => origin.trim().replace(/\/$/, ""))
+        .filter(Boolean),
+    ),
 });
 
 // Toda variable de entorno se lee acá, validada. Nada de process.env suelto
