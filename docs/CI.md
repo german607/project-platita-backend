@@ -39,7 +39,14 @@ revisa el diff usando las reglas de `docs/AGENTS.md` y de los roles de
 - Deja comentarios en las líneas con problemas, marcados **[Bloqueante]** o
   **[Sugerencia]**.
 - Publica un comentario de resumen con el veredicto.
+- Deja una revisión formal en el PR, firmada por `github-actions[bot]`:
+  **Approve** si no hay bloqueantes, **Request changes** si los hay. Una
+  aprobación posterior reemplaza el "request changes" anterior.
 - **El check falla si hay al menos un bloqueante**, y así bloquea el merge.
+
+La aprobación sirve para exigir "1 aprobación" en la protección de ramas
+sin trabarse: GitHub no deja aprobar los PRs propios. En `main` conviene
+exigir además una aprobación humana.
 
 Qué bloquea: montos con decimales, movimientos del libro mayor editados o
 borrados, operaciones no acotadas al comercio, cobros sin bloqueo (sobregiro),
@@ -65,12 +72,18 @@ secret**. Alcanza con uno de los dos:
 Además, la app de Claude para GitHub tiene que estar instalada con acceso a
 este repo (ya lo está).
 
+### Permitir que Actions apruebe PRs
+
+**Settings → Actions → General → Workflow permissions** → tildar **Allow
+GitHub Actions to create and approve pull requests** → **Save**. Sin esto,
+la revisión IA falla al intentar aprobar.
+
 ### Protección de ramas
 
 En **Settings → Rules → Rulesets → New branch ruleset**, uno para `dev` y
 otro para `main` (o uno solo apuntando a las dos):
 
-- **Require a pull request before merging**.
+- **Require a pull request before merging**, con *Required approvals* en 1.
 - **Require status checks to pass**, agregando:
   - `Build, migraciones y arranque`
   - `Revisión de Claude`

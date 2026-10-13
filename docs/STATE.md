@@ -46,11 +46,13 @@ recibe PRs desde `dev` o `hotfix/*`. Detalle en [`CI.md`](CI.md).
 Cada PR a `dev` o `main` pasa por dos checks de GitHub Actions: **CI**
 (`ci.yml`: tipos, migraciones sobre Postgres, schema sin migración
 pendiente, arranque y tests) y **Revisión IA** (`ai-review.yml`: Claude
-revisa con las reglas de este repo, comenta y falla si hay bloqueantes).
+revisa con las reglas de este repo, comenta, aprueba o pide cambios en el
+PR como `github-actions[bot]`, y falla si hay bloqueantes).
 Escritos en la rama `feature/ci-cd` y validados con actionlint;
 **todavía no corrieron en GitHub** (el entorno de la IA no pudo instalar
-dependencias de npm para probar los pasos en local). Falta cargar el
-secret de Claude y la protección de ramas. No hay despliegue (CD)
+dependencias de npm para probar los pasos en local). El secret de Claude y el
+permiso de Actions para aprobar PRs ya están cargados en GitHub; falta la
+protección de ramas (se configura después de la primera corrida). No hay despliegue (CD)
 todavía.
 
 Limitación del entorno: la política de la organización (Cencosud) tiene

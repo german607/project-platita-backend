@@ -97,6 +97,10 @@ jobs:
           # Se pasa por variable de entorno (nunca interpolado en el script)
           # porque el texto lo escribe la IA.
           RESULTADO: ${{ steps.review.outputs.structured_output }}
+          # Token de Actions: la aprobación la firma github-actions[bot].
+          # Requiere "Allow GitHub Actions to create and approve pull requests".
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
         run: |
           if [ -z "$RESULTADO" ]; then
             echo "::error::La revisión de IA no terminó o no devolvió veredicto. Revisá el log del paso anterior (¿falta el secret ANTHROPIC_API_KEY o CLAUDE_CODE_OAUTH_TOKEN?)."
@@ -112,7 +116,15 @@ jobs:
             echo "$RESULTADO" | jq -r '.resumen'
           } >> "$GITHUB_STEP_SUMMARY"
           if [ "$VEREDICTO" != "aprobar" ] || [ "$BLOQUEANTES" != "0" ]; then
+            gh pr review "$PR" --request-changes \
+              --body "Revisión IA: $BLOQUEANTES problema(s) bloqueante(s). Detalle en los comentarios del PR." \
+              || echo "::warning::No se pudo dejar la revisión 'request changes' (¿está habilitado que Actions apruebe PRs?)."
             echo "::error::La revisión de IA encontró $BLOQUEANTES problema(s) bloqueante(s). Ver los comentarios del PR."
+            exit 1
+          fi
+          # La aprobación nueva reemplaza un "request changes" anterior del mismo bot.
+          if ! gh pr review "$PR" --approve --body "Revisión IA: sin bloqueantes."; then
+            echo "::error::La revisión de IA aprobó, pero GitHub rechazó la aprobación. Habilitá 'Allow GitHub Actions to create and approve pull requests' en Settings → Actions → General."
             exit 1
           fi
           echo "Aprobado por la revisión de IA."

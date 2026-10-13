@@ -141,3 +141,9 @@ regla de mantenimiento en [`AGENTS.md`](AGENTS.md).
   probó en local con resultados de ejemplo. Los pasos de npm/Prisma no se
   pudieron correr en local porque el entorno de la IA no tiene acceso al
   registro de npm; se validan en la primera corrida en GitHub.
+- `ai-review.yml`: además del check, la revisión deja una revisión formal en
+  el PR con el token de Actions (`github-actions[bot]`): **Approve** sin
+  bloqueantes, **Request changes** con bloqueantes. Germán habilitó en
+  GitHub el secret de Claude y "Allow GitHub Actions to create and approve
+  pull requests". Lógica del veredicto probada en local con `gh` simulado
+  (aprobar, cambios requeridos, sin veredicto, aprobación rechazada).
