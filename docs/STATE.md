@@ -51,12 +51,17 @@ PR como `github-actions[bot]`, y falla si hay bloqueantes).
 Mergeados en `dev` con el PR #2. **El CI pasó en GitHub.** La rama por
 defecto del repo es `dev`, porque la action de Claude solo corre si
 `ai-review.yml` es idéntico al de la rama por defecto. La revisión
-IA ya funcionó: aprobó el PR #3. Pendiente de merge (manual, porque
-cambia el workflow): `feature/revision-ia-resumen`, que hace que el
-resumen de Claude salga como texto de la revisión y que el error real
-aparezca en el check cuando Claude falla. El secret de Claude y el permiso de Actions para
-aprobar PRs ya están cargados en GitHub; falta la protección de ramas. No
-hay despliegue (CD) todavía.
+IA ya funcionó: aprobó el PR #3. Con el PR #4 (mergeado a mano) el
+resumen de Claude sale como texto de la revisión y el error real aparece
+en el check cuando Claude falla; eso todavía no se vio en una corrida
+real. El secret de Claude y el permiso de Actions para
+aprobar PRs ya están cargados en GitHub; falta la protección de ramas.
+
+Paquetes: en la rama `feature/paquetes` hay un `Dockerfile` y
+`packages.yml`, que publica la imagen en GitHub Packages al mergear
+(`dev` → stage `develop`, `main` → stage `production`). Sin probar en
+GitHub todavía. No hay servidor ni despliegue: las imágenes quedan
+publicadas, listas para desplegar.
 
 Limitación del entorno: la política de la organización (Cencosud) tiene
 Remote Control deshabilitado, así que no se pueden aprobar permisos

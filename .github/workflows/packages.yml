@@ -1,0 +1,108 @@
+# Paquetes por stage: cada vez que el CI termina bien sobre un push a dev o a
+# main (o sea, después de mergear un PR), se arma la imagen Docker de la API
+# y se publica en GitHub Packages (ghcr.io):
+#
+#   dev  -> stage develop     tags: develop, develop-<sha>
+#   main -> stage production  tags: production, latest, production-<sha>
+#
+# Cada publicación queda registrada como deployment en el environment de
+# GitHub correspondiente (develop / production). Detalle en docs/CI.md.
+name: Paquetes
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [dev, main]
+
+# Una publicación por rama a la vez, en orden (sin cancelar la anterior).
+concurrency:
+  group: packages-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    name: Publicar imagen
+    # Solo pushes (merges) con el CI en verde; los PRs no publican nada.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    environment:
+      name: ${{ github.event.workflow_run.head_branch == 'main' && 'production' || 'develop' }}
+      url: ${{ github.server_url }}/${{ github.repository }}/pkgs/container/${{ github.event.repository.name }}
+
+    steps:
+      # Se arma exactamente el commit que pasó el CI.
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Calcular nombre y tags
+        id: meta
+        env:
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
+          SHORT="${SHA:0:7}"
+          if [ "$BRANCH" = "main" ]; then
+            STAGE=production
+            TAGS="$IMAGE:production,$IMAGE:latest,$IMAGE:production-$SHORT"
+          else
+            STAGE=develop
+            TAGS="$IMAGE:develop,$IMAGE:develop-$SHORT"
+          fi
+          {
+            echo "image=$IMAGE"
+            echo "stage=$STAGE"
+            echo "short=$SHORT"
+            echo "tags=$TAGS"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Construir y publicar
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.event.workflow_run.head_sha }}
+            org.opencontainers.image.title=platita-backend
+            org.opencontainers.image.description=API de Platita (stage ${{ steps.meta.outputs.stage }})
+          cache-from: type=gha,scope=${{ steps.meta.outputs.stage }}
+          cache-to: type=gha,mode=max,scope=${{ steps.meta.outputs.stage }}
+
+      - name: Resumen
+        env:
+          IMAGE: ${{ steps.meta.outputs.image }}
+          STAGE: ${{ steps.meta.outputs.stage }}
+          SHORT: ${{ steps.meta.outputs.short }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          {
+            echo "## Imagen publicada — stage \`$STAGE\`"
+            echo
+            echo "Commit \`$SHORT\`. Tags:"
+            echo
+            echo "$TAGS" | tr ',' '\n' | sed 's/^/- `/; s/$/`/'
+            echo
+            echo '```bash'
+            echo "docker pull $IMAGE:$STAGE-$SHORT"
+            echo "docker run --rm -e DATABASE_URL=... $IMAGE:$STAGE-$SHORT npx prisma migrate deploy"
+            echo "docker run -d -e DATABASE_URL=... -p 3000:3000 $IMAGE:$STAGE-$SHORT"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

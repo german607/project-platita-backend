@@ -178,3 +178,27 @@ regla de mantenimiento en [`AGENTS.md`](AGENTS.md).
     porque los logs no siempre se pueden abrir desde donde se diagnostica.
   - Probado en local con `gh` simulado: sin registro, error de credencial,
     aprobado, cambios requeridos y workflow modificado.
+
+## 2026-10-13
+
+- Rama `feature/paquetes`: paquetes por stage, pedido de Germán ("cada PR a
+  dev genera un paquete en develop y main en prod").
+  - `Dockerfile` multi-stage (Node 22 bookworm-slim, openssl para Prisma),
+    corre como usuario `node`, `HEALTHCHECK` sobre `/health`. Incluye la CLI
+    de Prisma para correr `prisma migrate deploy` con la misma imagen.
+    `.dockerignore`.
+  - `ci.yml`: job **Imagen Docker** en PRs: arma la imagen, corre las
+    migraciones dentro del contenedor contra el Postgres del job y prueba
+    `/health`.
+  - `.github/workflows/packages.yml`: cuando el CI termina bien sobre un
+    push a `dev` o `main`, publica la imagen en GHCR con tags por stage
+    (`develop`/`develop-<sha>`; `production`/`latest`/`production-<sha>`)
+    y la registra como deployment en el environment `develop` o
+    `production`.
+  - Se interpretó "cada PR" como cada PR **mergeado**: abrir un PR no
+    publica nada.
+  - Verificación: actionlint sin errores y lógica de tags probada en local.
+    El build de la imagen no se pudo probar acá (sin daemon de Docker ni
+    acceso a npm); lo valida el job Imagen Docker en el PR.
+
+- Se corrigió en `STATE.md` y `TODO.md` la referencia al PR #4 como pendiente: ya está mergeado.
