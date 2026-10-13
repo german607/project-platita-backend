@@ -260,3 +260,29 @@ no pudo ejecutar `tsc`, Prisma ni el servidor; todo se revisó leyendo):
 - `npm install` avisó `EBADENGINE`: `cookie@2.0.1` (vía `@fastify/cors`)
   pide Node >= 22 y la máquina tiene 20.12.2. No bloquea; refuerza el
   pendiente de fijar la versión de Node.
+
+- Rama `feature/paquetes`: paquetes por stage, pedido de Germán ("cada PR a
+  dev genera un paquete en develop y main en prod").
+  - `Dockerfile` multi-stage (Node 22 bookworm-slim, openssl para Prisma),
+    corre como usuario `node`, `HEALTHCHECK` sobre `/health`. Incluye la CLI
+    de Prisma para correr `prisma migrate deploy` con la misma imagen.
+    `.dockerignore`.
+  - `ci.yml`: job **Imagen Docker** en PRs: arma la imagen, corre las
+    migraciones dentro del contenedor contra el Postgres del job y prueba
+    `/health`.
+  - `.github/workflows/packages.yml`: cuando el CI termina bien sobre un
+    push a `dev` o `main`, publica la imagen en GHCR con tags por stage
+    (`develop`/`develop-<sha>`; `production`/`latest`/`production-<sha>`)
+    y la registra como deployment en el environment `develop` o
+    `production`.
+  - Se interpretó "cada PR" como cada PR **mergeado**: abrir un PR no
+    publica nada.
+  - Verificación: actionlint sin errores y lógica de tags probada en local.
+    El build de la imagen no se pudo probar acá (sin daemon de Docker ni
+    acceso a npm); lo valida el job Imagen Docker en el PR.
+
+- Se corrigió en `STATE.md` y `TODO.md` la referencia al PR #4 como pendiente: ya está mergeado.
+- PR #5: pasaron CI, **Imagen Docker** (la imagen se armó, corrió las
+  migraciones dentro del contenedor y respondió `/health`) y la revisión IA,
+  que aprobó con el resumen como texto de la revisión (primera vez que se ve
+  el cambio del PR #4 funcionando).

@@ -113,3 +113,58 @@ jobs:
 
       - name: Tests
         run: npm test --if-present
+
+  # En cada PR se arma la imagen y se prueba de punta a punta (migraciones y
+  # /health dentro del contenedor). En push no hace falta: lo hace packages.yml.
+  imagen:
+    name: Imagen Docker
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: platita
+          POSTGRES_PASSWORD: platita
+          POSTGRES_DB: platita
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U platita"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Construir la imagen
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: platita-backend:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Migraciones y /health dentro del contenedor
+        env:
+          DATABASE_URL: postgresql://platita:platita@localhost:5432/platita
+        run: |
+          docker run --rm --network host -e DATABASE_URL platita-backend:ci npx prisma migrate deploy
+          docker run -d --name api --network host -e DATABASE_URL platita-backend:ci
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/health; then
+              echo
+              echo "OK: la imagen levanta y responde"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::La imagen no respondió /health en 30 segundos"
+          docker logs api
+          exit 1
