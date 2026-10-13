@@ -160,3 +160,6 @@ regla de mantenimiento en [`AGENTS.md`](AGENTS.md).
     Node 20 deprecado en los runners.
   - Recomendación registrada en `docs/CI.md`: rama por defecto del repo =
     `dev`, para que los PRs lleven el mismo workflow que la rama por defecto.
+- Germán puso `dev` como rama por defecto del repo y mergeó el PR #2 a
+  mano. Rama `feature/estado-ci`: se actualizan `TODO.md` y `STATE.md` con
+  eso; su PR es la primera prueba real de la revisión IA.
