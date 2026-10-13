@@ -103,15 +103,17 @@ Este es el **único backlog** del proyecto (ver `docs/AGENTS.md`). El estado gen
 
 ## 9. Infraestructura y despliegue (Backend)
 
-- [ ] **P0** Dockerfile de la API
+- [x] **P0** Dockerfile de la API (multi-stage, healthcheck, CLI de Prisma para migrar); validado por el job Imagen Docker en el PR #5
+- [~] **P1** Paquetes por stage: merge a `dev` publica la imagen `develop` y merge a `main` la `production` en GHCR (`packages.yml`)
+- [ ] **P2** Imagen más liviana: separar la CLI de Prisma de las dependencias de producción
 - [x] **P0** CI en GitHub Actions: typecheck, migraciones, drift de schema, arranque y tests (`ci.yml`; ver `docs/CI.md`). Pasó en GitHub en el PR #2
 - [x] **P0** Revisión con IA en cada PR a `dev`/`main` que aprueba o pide cambios y bloquea el merge si hay problemas graves (`ai-review.yml`). Aprobó el PR #3
-- [~] **P1** Resumen de la revisión IA publicado por el workflow y error real de Claude visible en el check (rama `feature/revision-ia-resumen`)
+- [x] **P1** Resumen de la revisión IA publicado por el workflow (visto en el PR #5) y error real de Claude visible en el check (este último sin ver todavía en una falla real)
 - [x] **P0** Poner `dev` como rama por defecto del repo y mergear el PR #2 a mano (la revisión IA no puede revisar el PR que la crea)
 - [x] **P0** Cargar en GitHub el secret de Claude y permitir que Actions apruebe PRs
 - [ ] **P0** Protección de ramas de `dev` y `main` con los checks requeridos y 1 aprobación (pasos en `docs/CI.md`; después de la primera corrida)
 - [ ] **P1** Lint (ESLint) como paso del CI
-- [ ] **P1** Despliegue en un proveedor barato (Railway, Render o Fly.io) + Postgres gestionado, automático desde `main` después del CI (CD)
+- [ ] **P1** Despliegue en un proveedor barato (Railway, Render o Fly.io) + Postgres gestionado: desplegar la imagen `develop` y la `production` desde `packages.yml` (CD)
 - [ ] **P1** Backups automáticos de la base
 - [ ] **P2** Monitoreo y alertas
 

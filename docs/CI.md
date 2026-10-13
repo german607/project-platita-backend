@@ -29,6 +29,7 @@ Corre en cada PR hacia `dev` o `main` y en cada push a esas ramas.
 | `prisma migrate diff` | Que `schema.prisma` no tenga cambios sin migración |
 | `npm run build` + `/health` | Que la API compile y levante |
 | `npm test --if-present` | Los tests, cuando existan |
+| Imagen Docker (solo PRs) | Que el `Dockerfile` arme, que las migraciones corran dentro del contenedor y que la imagen responda `/health` |
 
 ### 2. Revisión IA (`ai-review.yml`)
 
@@ -119,7 +120,30 @@ npx prisma migrate deploy
 npm run build && node dist/server.js   # y en otra terminal: curl localhost:3000/health
 ```
 
-## CD (pendiente)
+## Paquetes por stage (`packages.yml`)
 
-Todavía no hay despliegue: falta elegir proveedor (ver `TODO.md` §9). Cuando
-exista, el despliegue saldría de `main` después de que pase el CI.
+Cada merge publica una imagen Docker de la API en GitHub Packages
+(`ghcr.io/german607/project-platita-backend`), solo si el CI pasó sobre el
+commit mergeado:
+
+| Merge a | Stage (environment) | Tags |
+|---|---|---|
+| `dev` | `develop` | `develop`, `develop-<sha>` |
+| `main` | `production` | `production`, `latest`, `production-<sha>` |
+
+- Los PRs no publican nada; publica el merge (el push a la rama).
+- Cada publicación queda como deployment en **Environments** del repo, con
+  link al paquete. Los tags `develop`/`production` siempre apuntan a la
+  última; los tags con `<sha>` no cambian y sirven para volver atrás.
+- La imagen no corre migraciones sola. Al desplegar:
+  ```bash
+  docker run --rm -e DATABASE_URL=... ghcr.io/german607/project-platita-backend:develop npx prisma migrate deploy
+  docker run -d -e DATABASE_URL=... -p 3000:3000 ghcr.io/german607/project-platita-backend:develop
+  ```
+- `packages.yml` se dispara con `workflow_run`, que usa la versión del
+  archivo en la rama por defecto (`dev`). Un cambio a este workflow aplica
+  desde que se mergea en `dev`.
+
+Todavía no hay servidor: las imágenes quedan publicadas listas para
+desplegar. Cuando se elija proveedor (`TODO.md` §9), el despliegue se suma
+como un paso más de este workflow, por environment.
