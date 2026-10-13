@@ -57,6 +57,14 @@ lógica. El estilo, los nombres y la falta de tests son sugerencias.
 Los PRs en borrador no se revisan; se revisan al marcarlos como listos. Cada
 push nuevo al PR dispara una revisión nueva.
 
+**Límite de seguridad:** la action de Claude solo corre si
+`.github/workflows/ai-review.yml` del PR es idéntico al de la rama por
+defecto del repo. Así un PR no puede cambiar a su propio revisor. Un PR que
+modifica ese archivo falla la revisión con un mensaje que lo explica, y lo
+tiene que revisar y mergear una persona. Por eso la rama por defecto del
+repo tiene que ser `dev`: los PRs salen de `dev` y llevan el mismo
+workflow.
+
 ## Configuración (una sola vez, en GitHub)
 
 ### Secret de Claude
@@ -77,6 +85,11 @@ este repo (ya lo está).
 **Settings → Actions → General → Workflow permissions** → tildar **Allow
 GitHub Actions to create and approve pull requests** → **Save**. Sin esto,
 la revisión IA falla al intentar aprobar.
+
+### Rama por defecto
+
+**Settings → General → Default branch** → `dev`. Ver el límite de
+seguridad de la revisión IA, más arriba.
 
 ### Protección de ramas
 

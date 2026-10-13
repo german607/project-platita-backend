@@ -26,7 +26,7 @@ jobs:
       id-token: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -103,7 +103,14 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
         run: |
           if [ -z "$RESULTADO" ]; then
-            echo "::error::La revisión de IA no terminó o no devolvió veredicto. Revisá el log del paso anterior (¿falta el secret ANTHROPIC_API_KEY o CLAUDE_CODE_OAUTH_TOKEN?)."
+            # Por seguridad, la action no corre si este workflow difiere del de la
+            # rama por defecto: un PR no puede cambiar a su propio revisor.
+            DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+            if ! git diff --quiet "origin/$DEFAULT_BRANCH" -- .github/workflows/ai-review.yml 2>/dev/null; then
+              echo "::error::Este PR modifica la revisión de IA (.github/workflows/ai-review.yml difiere de '$DEFAULT_BRANCH'), así que Claude no puede revisarlo. Necesita revisión y merge de una persona."
+            else
+              echo "::error::La revisión de IA no terminó o no devolvió veredicto. Revisá el log del paso 'Revisar el PR' (¿secret ANTHROPIC_API_KEY o CLAUDE_CODE_OAUTH_TOKEN válido?)."
+            fi
             exit 1
           fi
           VEREDICTO=$(echo "$RESULTADO" | jq -r '.veredicto')

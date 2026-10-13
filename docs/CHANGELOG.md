@@ -147,3 +147,16 @@ regla de mantenimiento en [`AGENTS.md`](AGENTS.md).
   GitHub el secret de Claude y "Allow GitHub Actions to create and approve
   pull requests". Lógica del veredicto probada en local con `gh` simulado
   (aprobar, cambios requeridos, sin veredicto, aprobación rechazada).
+- Se abrió el PR #2 (`feature/ci-cd` → `dev`), primera corrida del pipeline:
+  - **CI: pasó entero en GitHub** (`npm ci`, tipos, migraciones sobre
+    Postgres 16, schema sin migración pendiente, build y `/health`). Es la
+    primera verificación de esos pasos fuera de la máquina de Jerónimo.
+  - **Revisión IA: no corrió.** La action se saltea si `ai-review.yml`
+    difiere del de la rama por defecto (`main`), donde todavía no existe.
+    Es una medida de seguridad de la action, no un error de configuración.
+  - El paso del veredicto ahora distingue ese caso y lo explica, en vez de
+    sugerir que falta el secret.
+  - `actions/checkout` y `actions/setup-node` pasaron a `v5` por el aviso de
+    Node 20 deprecado en los runners.
+  - Recomendación registrada en `docs/CI.md`: rama por defecto del repo =
+    `dev`, para que los PRs lleven el mismo workflow que la rama por defecto.
