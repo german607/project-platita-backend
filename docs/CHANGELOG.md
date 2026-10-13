@@ -202,3 +202,7 @@ regla de mantenimiento en [`AGENTS.md`](AGENTS.md).
     acceso a npm); lo valida el job Imagen Docker en el PR.
 
 - Se corrigió en `STATE.md` y `TODO.md` la referencia al PR #4 como pendiente: ya está mergeado.
+- PR #5: pasaron CI, **Imagen Docker** (la imagen se armó, corrió las
+  migraciones dentro del contenedor y respondió `/health`) y la revisión IA,
+  que aprobó con el resumen como texto de la revisión (primera vez que se ve
+  el cambio del PR #4 funcionando).
