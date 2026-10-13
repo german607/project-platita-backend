@@ -143,9 +143,10 @@ editarlo la IA por una restricción del entorno).
   --noEmit` no mostró errores. **Sigue sin correrse** la lógica nueva
   (idempotencia, vista previa, movimientos del comercio, búsqueda por
   teléfono, inactivos, CORS).
-- **Aviso de Node:** `@fastify/cors` trae `cookie@2.0.1`, que pide Node
-  >= 22; esta máquina tiene 20.12.2 y anda con un warning `EBADENGINE`.
-  Ver el pendiente de versión mínima de Node en `TODO.md` §1.
+- **Node:** el proyecto pide Node >= 22 (`engines` en `package.json` y
+  `.nvmrc`), igual que el Dockerfile y el CI. `@fastify/cors` trae
+  `cookie@2.0.1`, que lo exige; con Node 20 solo daba un warning
+  `EBADENGINE`. Con `nvm use` se elige la versión sola.
 - **Escrito y sin verificar en ejecución**: los endpoints nuevos, el
   bloqueo de cobros simultáneos, la normalización de teléfonos y la
   paginación. No se recorrió el flujo completo. Ver la lista "Verificar

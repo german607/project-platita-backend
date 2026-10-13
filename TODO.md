@@ -35,7 +35,7 @@ Este es el **único backlog** del proyecto (ver `docs/AGENTS.md`). El estado gen
 - [~] Consola de pruebas local en `/dev`, solo fuera de producción (`src/dev/console.ts`)
 - [ ] **P1** Ponerle nombres descriptivos a las migraciones nuevas (las dos primeras quedaron como `primeramigracion_jero` y `segunda_parte`)
 - [ ] **P2** Contrato de API formal (OpenAPI) cuando las rutas se estabilicen; por ahora la tabla de `docs/BACKEND.md` alcanza
-- [ ] **P1** Fijar la versión mínima de Node (dependencias de Fastify y `@fastify/cors` (`cookie@2`) piden >= 22; algunas máquinas de desarrollo tienen 20.12) y agregar `engines` al `package.json`
+- [x] **P1** Fijar la versión mínima de Node: `engines >=22` en `package.json` y `.nvmrc` con `22` (coincide con el Dockerfile y el CI; 2026-10-13)
 
 ## 2. Autenticación y comercios (Backend)
 

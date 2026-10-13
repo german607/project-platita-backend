@@ -286,3 +286,7 @@ no pudo ejecutar `tsc`, Prisma ni el servidor; todo se revisó leyendo):
   migraciones dentro del contenedor y respondió `/health`) y la revisión IA,
   que aprobó con el resumen como texto de la revisión (primera vez que se ve
   el cambio del PR #4 funcionando).
+
+- Se fijó la versión de Node: `"engines": { "node": ">=22" }` en
+  `package.json` y `.nvmrc` con `22`, para coincidir con el Dockerfile y el
+  CI y evitar el `EBADENGINE`. Cierra el pendiente de `TODO.md` §1.
