@@ -34,6 +34,7 @@ model Customer {
   createdAt    DateTime      @default(now())
   lastVisitAt  DateTime?
   transactions Transaction[]
+  idempotencyKeys IdempotencyKey[]
 
   @@unique([merchantId, phone])
   @@index([merchantId, lastVisitAt])
@@ -44,9 +45,12 @@ model BonusRule {
   id          String   @id @default(cuid())
   merchantId  String
   merchant    Merchant @relation(fields: [merchantId], references: [id])
+  name        String?  // opcional, ej. "Promo $1.000+"
+  description String?
   minTopUp    Int      // en centésimos de peso
   bonusAmount Int      // en centésimos de peso
   active      Boolean  @default(true)
+  transactions Transaction[]
 
   @@index([merchantId, active])
 }
@@ -61,9 +65,29 @@ model Transaction {
   amount     Int             // centésimos; positivo suma saldo, negativo resta
   paidWith   String?         // "efectivo", "mercadopago", etc. (solo informativo)
   note       String?
+  // Solo en BONUS: de qué regla salió. Nulo en los bonos anteriores a esta columna.
+  bonusRuleId String?
+  bonusRule   BonusRule?     @relation(fields: [bonusRuleId], references: [id])
   createdAt  DateTime        @default(now())
 
   @@index([customerId, createdAt])
+  @@index([bonusRuleId])
+}
+
+// Claves de idempotencia de cargas, cobros y ajustes: la misma clave con el
+// mismo cuerpo devuelve la respuesta guardada sin registrar de nuevo.
+// Se borran pasadas 48 horas.
+model IdempotencyKey {
+  id          String   @id @default(cuid())
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id])
+  key         String
+  requestHash String   // hash de la operación + cuerpo
+  response    Json
+  createdAt   DateTime @default(now())
+
+  @@unique([customerId, key])
+  @@index([createdAt])
 }
 
 enum TransactionType {

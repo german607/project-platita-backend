@@ -7,7 +7,13 @@ se actualiza en el mismo cambio (ver [`AGENTS.md`](AGENTS.md)).
 
 Node + TypeScript (ESM, `module: NodeNext`), Fastify 5, Prisma 5 sobre
 PostgreSQL 16, Zod para validar. Entorno local con `docker-compose.yml`
-(Postgres) y `.env.example` (`DATABASE_URL`, `PORT`).
+(Postgres) y `.env.example` (`DATABASE_URL`, `PORT`). Variables de
+entorno (todas validadas en `src/config.ts`): `DATABASE_URL`, `PORT`
+(default 3000), `NODE_ENV` y `CORS_ORIGINS` (orígenes del frontend
+separados por coma, ej. `https://app.platita.uy,http://localhost:5173`;
+vacío = sin CORS; nunca `*`). Con CORS habilitado se aceptan los headers
+`Content-Type`, `Authorization` e `Idempotency-Key`, los métodos GET,
+POST, PATCH y OPTIONS, y se expone `Idempotent-Replayed`.
 
 ## Estructura del código
 
@@ -19,6 +25,7 @@ src/
   lib/                 piezas compartidas, sin lógica de un módulo en particular
     db.ts              cliente Prisma, getBalance / getBalances, tipo DbClient
     errors.ts          AppError y helpers (notFound, conflict, unprocessable…)
+    idempotency.ts     claves de idempotencia (runIdempotent) y su limpieza
     error-handler.ts   convierte cualquier error en { error, code, details? }
     schemas.ts         validaciones reutilizables (ids, pesos, teléfono UY, paginación)
     pagination.ts      pageArgs / toPage (cursor)
@@ -65,7 +72,10 @@ Cada módulo tiene los mismos tres archivos:
 
 - **Montos**: la API **recibe pesos** y la base **guarda centésimos**
   (enteros). Las respuestas devuelven centésimos. Máximo 1.000.000 de
-  pesos por operación.
+  pesos por operación. **Deuda técnica conocida y aceptada**: entrar en
+  pesos y salir en centésimos es asimétrico; unificarlo rompe a todo
+  consumidor, así que se deja como está hasta un cambio coordinado con el
+  frontend (que hoy convierte en un solo lugar).
 - **Saldo** = suma de `Transaction.amount` del cliente. Nunca se guarda
   como campo. Positivo suma, negativo resta.
 - **Saldo cerrado**: un `Customer` pertenece a un solo `Merchant`; el
@@ -77,8 +87,27 @@ Cada módulo tiene los mismos tres archivos:
   `ADJUSTMENT` que lo compense (nota obligatoria).
 - **Bonificación**: al cargar, se aplica la `BonusRule` activa del
   comercio con mayor `minTopUp` que sea `<=` al monto cargado, y se
-  registra como un `BONUS` aparte. El bono es un monto fijo, no un
-  porcentaje. Las reglas no se borran: se desactivan (`active: false`).
+  registra como un `BONUS` aparte, que guarda de qué regla salió
+  (`bonusRuleId`; nulo en los bonos anteriores a esa columna). Si dos
+  reglas empatan en mínimo gana la de menor id. La búsqueda de la regla es
+  una sola función (`findApplicableRule`) que usan la carga real y la
+  vista previa (`GET /merchants/:id/bonus-preview`), así no pueden
+  divergir. El bono es un monto fijo, no un porcentaje. Las reglas no se
+  borran: se desactivan (`active: false`). Cada regla puede tener `name` y
+  `description` opcionales y en los listados trae `timesUsed` (cuántos
+  bonos salieron de ella).
+- **Idempotencia** (opcional): `POST /customers/:id/topups`, `/charges` y
+  `/adjustments` aceptan el header `Idempotency-Key` (1 a 255
+  caracteres). La clave se guarda por cliente, junto con un hash de la
+  operación y el cuerpo, **en la misma transacción** que el movimiento y
+  con la fila del cliente bloqueada, así dos pedidos simultáneos con la
+  misma clave se hacen en fila. Misma clave y mismo cuerpo: devuelve la
+  respuesta guardada (201) con el header `Idempotent-Replayed: true` y no
+  registra nada. Misma clave con otra operación u otro cuerpo: 422
+  `IDEMPOTENCY_KEY_REUSED`. Los errores (ej. saldo insuficiente) no se
+  guardan: reintentar con la misma clave vuelve a evaluar. Las claves
+  vencen a las 48 horas (se borran cada hora, y una vencida se ignora).
+  Sin header, todo funciona como antes.
 - **Cobro y ajuste negativo**: se rechazan con 422 `INSUFFICIENT_BALANCE`
   si el saldo no alcanza. Corren en una transacción que bloquea la fila
   del cliente (`SELECT … FOR UPDATE`), así dos cobros simultáneos no
@@ -88,7 +117,9 @@ Cada módulo tiene los mismos tres archivos:
   se creó el cliente.
 - **Teléfono**: solo uruguayo, siempre guardado normalizado como
   `+598XXXXXXXX`. `099123456`, `99 123 456` y `+59899123456` son el
-  mismo cliente.
+  mismo cliente. La búsqueda (`?search=`) normaliza igual: un teléfono
+  completo en cualquier formato lo encuentra, y también sirve parcial.
+  `?phone=` filtra por teléfono exacto sin crear nada.
 
 ## Convenciones de la API
 
@@ -108,13 +139,18 @@ Cada módulo tiene los mismos tres archivos:
   `createdAt`.
 - `Customer` — `id`, `merchantId`, `phone`, `name?`, `lastVisitAt?`.
   Único por (`merchantId`, `phone`). Índice (`merchantId`, `lastVisitAt`).
-- `BonusRule` — `merchantId`, `minTopUp`, `bonusAmount`, `active`.
-  Índice (`merchantId`, `active`).
+- `BonusRule` — `merchantId`, `name?`, `description?`, `minTopUp`,
+  `bonusAmount`, `active`. Índice (`merchantId`, `active`).
 - `Transaction` — `customerId`, `type` (`TOPUP`/`BONUS`/`CHARGE`/
-  `ADJUSTMENT`), `amount`, `paidWith?`, `note?`, `createdAt`. Índice
-  (`customerId`, `createdAt`).
+  `ADJUSTMENT`), `amount`, `paidWith?`, `note?`, `bonusRuleId?` (solo en
+  `BONUS`), `createdAt`. Índices (`customerId`, `createdAt`) y
+  (`bonusRuleId`).
+- `IdempotencyKey` — `customerId`, `key`, `requestHash`, `response`
+  (JSON), `createdAt`. Único por (`customerId`, `key`).
 
-Los índices están en la migración `20261011173315_segunda_parte`.
+Los índices originales están en la migración
+`20261011173315_segunda_parte`; las columnas y la tabla nuevas, en
+`20261013150000_idempotencia_y_origen_de_bonos`.
 
 ## Endpoints
 
@@ -126,17 +162,19 @@ Los índices están en la migración `20261011173315_segunda_parte`.
 | GET | `/merchants/:id` | Un comercio |
 | PATCH | `/merchants/:id` | Edita un comercio |
 | POST | `/merchants/:merchantId/bonus-rules` | Crea una regla de bonificación |
-| GET | `/merchants/:merchantId/bonus-rules` | Reglas del comercio |
+| GET | `/merchants/:merchantId/bonus-rules` | Reglas del comercio, cada una con `timesUsed` |
+| GET | `/merchants/:merchantId/bonus-preview?amount=` | Qué regla y cuánto bono daría una carga de `amount` pesos (no registra nada) |
 | PATCH | `/bonus-rules/:id` | Edita o desactiva una regla |
 | POST | `/merchants/:merchantId/customers` | Busca o crea cliente por teléfono (devuelve saldo) |
-| GET | `/merchants/:merchantId/customers?search=` | Lista clientes con saldo (paginado) |
-| GET | `/merchants/:merchantId/inactive?days=60` | Clientes inactivos (paginado) |
+| GET | `/merchants/:merchantId/customers?search=&phone=` | Lista clientes con saldo (paginado); `search` por nombre o teléfono en cualquier formato, `phone` exacto |
+| GET | `/merchants/:merchantId/inactive?days=60` | Clientes inactivos con su saldo (paginado) y `total` de inactivos |
+| GET | `/merchants/:merchantId/transactions?from=&to=&type=` | Movimientos de todo el comercio, con `customer {id,name,phone}` (paginado; `from` inclusivo, `to` exclusivo, ISO con offset) |
 | GET | `/customers/:id` | Un cliente con saldo |
 | PATCH | `/customers/:id` | Cambia el nombre |
 | GET | `/customers/:id/balance` | Saldo actual |
-| POST | `/customers/:id/topups` | Registra carga y aplica bonificación |
-| POST | `/customers/:id/charges` | Cobra descontando saldo |
-| POST | `/customers/:id/adjustments` | Corrección manual con signo |
+| POST | `/customers/:id/topups` | Registra carga y aplica bonificación (acepta `Idempotency-Key`) |
+| POST | `/customers/:id/charges` | Cobra descontando saldo (acepta `Idempotency-Key`) |
+| POST | `/customers/:id/adjustments` | Corrección manual con signo (acepta `Idempotency-Key`) |
 | GET | `/customers/:id/transactions?type=` | Libro mayor del cliente (paginado) |
 
 Ninguno tiene autenticación todavía.

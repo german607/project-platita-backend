@@ -11,7 +11,10 @@ export const updateCustomerBody = z
   .refine((body) => Object.keys(body).length > 0, { message: "Hay que enviar al menos un campo" });
 
 export const listCustomersQuery = pageQuery.extend({
+  // Texto libre: nombre o teléfono (en cualquier formato, también parcial).
   search: z.string().trim().min(1).optional(),
+  // Teléfono exacto (se normaliza igual que al guardarlo); no crea nada.
+  phone: uyPhone.optional(),
 });
 
 export const inactiveQuery = pageQuery.extend({

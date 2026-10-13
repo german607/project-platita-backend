@@ -79,35 +79,43 @@ var ENDPOINTS = [
 
   { section: "Reglas de bonificación", method: "POST", path: "/merchants/:merchantId/bonus-rules", captures: "bonusRuleId",
     desc: "Cargando minTopUp pesos o más, recibe bonusAmount pesos de bono. Se aplica la regla activa de mayor mínimo.",
-    body: { minTopUp: 2000, bonusAmount: 300 } },
-  { method: "GET", path: "/merchants/:merchantId/bonus-rules", desc: "Reglas del comercio, de menor a mayor mínimo." },
-  { method: "PATCH", path: "/bonus-rules/:bonusRuleId", desc: "Edita o desactiva una regla (no se borran).",
+    body: { minTopUp: 2000, bonusAmount: 300, name: "Promo $2.000+", description: "Cargá $2.000 y llevate $300 de regalo" } },
+  { method: "GET", path: "/merchants/:merchantId/bonus-rules",
+    desc: "Reglas del comercio, de menor a mayor mínimo. Cada una trae timesUsed: cuántos bonos salieron de ella." },
+  { method: "PATCH", path: "/bonus-rules/:bonusRuleId", desc: "Edita o desactiva una regla (no se borran). name y description aceptan null para borrarlos.",
     body: { active: false } },
+  { method: "GET", path: "/merchants/:merchantId/bonus-preview",
+    desc: "Vista previa: qué regla y cuánto bono daría una carga de amount pesos. No registra nada.",
+    query: "amount=2500" },
 
   { section: "Clientes", method: "POST", path: "/merchants/:merchantId/customers", captures: "customerId",
     desc: "Busca o crea un cliente por teléfono. El teléfono se normaliza (099123456 = +59899123456). Devuelve el cliente con su saldo.",
     body: { phone: "099123456", name: "Cliente de prueba" } },
-  { method: "GET", path: "/merchants/:merchantId/customers", desc: "Lista clientes con su saldo. search busca por nombre o teléfono.",
+  { method: "GET", path: "/merchants/:merchantId/customers",
+    desc: "Lista clientes con su saldo. search busca por nombre o teléfono en cualquier formato (099123456 encuentra a +59899123456; también parcial). phone filtra por teléfono exacto sin crear nada.",
     query: "limit=20" },
   { method: "GET", path: "/customers/:customerId", desc: "Un cliente con su saldo." },
   { method: "PATCH", path: "/customers/:customerId", desc: "Cambia el nombre del cliente.",
     body: { name: "Nuevo nombre" } },
   { method: "GET", path: "/customers/:customerId/balance", desc: "Saldo actual (en centésimos de peso)." },
-  { method: "GET", path: "/merchants/:merchantId/inactive", desc: "Clientes sin visita en N días, para campañas. Paginado.",
+  { method: "GET", path: "/merchants/:merchantId/inactive", desc: "Clientes sin visita en N días, para campañas. Paginado; cada uno con su saldo, y total cuenta todos los inactivos.",
     query: "days=60&limit=50" },
 
-  { section: "Saldo (libro mayor)", method: "POST", path: "/customers/:customerId/topups",
-    desc: "Registra una carga (el comercio ya cobró) y aplica la bonificación. Devuelve el movimiento, el bono (o null) y el saldo.",
+  { section: "Saldo (libro mayor)", method: "POST", path: "/customers/:customerId/topups", idempotent: true,
+    desc: "Registra una carga (el comercio ya cobró) y aplica la bonificación. Devuelve el movimiento, el bono (o null) y el saldo. Con Idempotency-Key, reenviar no duplica.",
     body: { amount: 2000, paidWith: "efectivo" } },
-  { method: "POST", path: "/customers/:customerId/charges",
-    desc: "Cobra descontando saldo. 422 INSUFFICIENT_BALANCE si no alcanza.",
+  { method: "POST", path: "/customers/:customerId/charges", idempotent: true,
+    desc: "Cobra descontando saldo. 422 INSUFFICIENT_BALANCE si no alcanza. Acepta Idempotency-Key.",
     body: { amount: 350, note: "Café + medialuna" } },
-  { method: "POST", path: "/customers/:customerId/adjustments",
-    desc: "Corrección manual con signo (positivo suma, negativo resta). La nota es obligatoria.",
+  { method: "POST", path: "/customers/:customerId/adjustments", idempotent: true,
+    desc: "Corrección manual con signo (positivo suma, negativo resta). La nota es obligatoria. Acepta Idempotency-Key.",
     body: { amount: -50, note: "Corrección por cobro duplicado" } },
   { method: "GET", path: "/customers/:customerId/transactions",
     desc: "Movimientos del cliente, del más nuevo al más viejo. Filtro opcional type: TOPUP, BONUS, CHARGE, ADJUSTMENT.",
-    query: "limit=20" }
+    query: "limit=20" },
+  { method: "GET", path: "/merchants/:merchantId/transactions",
+    desc: "Movimientos de todo el comercio, del más nuevo al más viejo, con nombre y teléfono del cliente. from (inclusivo) y to (exclusivo) son fechas ISO con offset; type es opcional.",
+    query: "from=2026-10-13T00:00:00-03:00&to=2026-10-14T00:00:00-03:00&limit=50" }
 ];
 
 var VARS = ["merchantId", "bonusRuleId", "customerId"];
@@ -145,7 +153,11 @@ ENDPOINTS.forEach(function (ep) {
   card.appendChild(head);
   card.appendChild(el("p", "desc", ep.desc));
 
-  var bodyBox = null, queryBox = null;
+  var bodyBox = null, queryBox = null, keyBox = null;
+  if (ep.idempotent) {
+    card.appendChild(el("label", null, "Idempotency-Key (opcional): repetir la misma clave no vuelve a registrar el movimiento"));
+    keyBox = el("input"); keyBox.placeholder = "ej. cobro-mesa-4-001"; card.appendChild(keyBox);
+  }
   if (ep.query !== undefined) {
     card.appendChild(el("label", null, "query string"));
     queryBox = el("input"); queryBox.value = ep.query; card.appendChild(queryBox);
@@ -171,6 +183,7 @@ ENDPOINTS.forEach(function (ep) {
     var url = fillPath(ep.path);
     if (queryBox && queryBox.value.trim()) url += "?" + queryBox.value.trim();
     var opts = { method: ep.method, headers: {} };
+    if (keyBox && keyBox.value.trim()) opts.headers["idempotency-key"] = keyBox.value.trim();
     if (bodyBox) {
       opts.headers["content-type"] = "application/json";
       opts.body = bodyBox.value;
@@ -183,7 +196,8 @@ ENDPOINTS.forEach(function (ep) {
       var data = null;
       try { data = JSON.parse(text); } catch (e) { /* no era JSON */ }
       status.className = "status " + (res.ok ? "ok" : "bad");
-      status.textContent = ep.method + " " + url + " → " + res.status + " (" + Math.round(performance.now() - t0) + " ms)";
+      status.textContent = ep.method + " " + url + " → " + res.status + " (" + Math.round(performance.now() - t0) + " ms)"
+        + (res.headers.get("idempotent-replayed") ? " — REINTENTO: devolvió la respuesta guardada, no registró de nuevo" : "");
       out.textContent = data !== null ? JSON.stringify(data, null, 2) : text;
       out.style.display = "block";
       if (res.ok && ep.captures && data && typeof data === "object" && data.id) {

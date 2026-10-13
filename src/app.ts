@@ -1,3 +1,4 @@
+import cors from "@fastify/cors";
 import Fastify from "fastify";
 import { config, isProduction } from "./config.js";
 import { db } from "./lib/db.js";
@@ -13,6 +14,17 @@ export async function buildApp() {
   app.addHook("onClose", async () => {
     await db.$disconnect();
   });
+
+  // CORS solo para los orígenes configurados; nunca "*".
+  if (config.CORS_ORIGINS.length > 0) {
+    await app.register(cors, {
+      origin: config.CORS_ORIGINS,
+      methods: ["GET", "POST", "PATCH", "OPTIONS"],
+      allowedHeaders: ["Content-Type", "Authorization", "Idempotency-Key"],
+      exposedHeaders: ["Idempotent-Replayed"],
+      maxAge: 86400,
+    });
+  }
 
   app.get("/health", async () => ({ ok: true }));
   await app.register(modules);
