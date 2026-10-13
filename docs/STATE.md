@@ -1,6 +1,6 @@
 # Estado actual — Platita
 
-> Última actualización: 2026-10-11. Esto es una foto del presente, se
+> Última actualización: 2026-10-12. Esto es una foto del presente, se
 > reescribe cuando deja de ser cierto — no es historial (eso es
 > [`CHANGELOG.md`](CHANGELOG.md)). Ver también [`../TODO.md`](../TODO.md)
 > y la regla de mantenimiento en [`AGENTS.md`](AGENTS.md).
@@ -35,8 +35,27 @@ este sistema: `TODO.md` es **el único backlog** (se borró
 endpoints vive solo en `docs/BACKEND.md` (el README apunta ahí) y los
 skills y `docs/AGENTS.md` se refieren a los mismos archivos. Se
 tocaron los skills de Germán solo para corregir referencias
-desactualizadas (rutas, backlog); conviene que los revise. Falta
-acordar con Germán cuál es la rama de integración (`dev` o `main`).
+desactualizadas (rutas, backlog); conviene que los revise.
+
+## Ramas y CI/CD
+
+La rama de integración es **`dev`** (decidido por Germán el 2026-10-11).
+Cada tarea va en `feature/...` desde `dev` y vuelve por PR; `main` solo
+recibe PRs desde `dev` o `hotfix/*`. Detalle en [`CI.md`](CI.md).
+
+Cada PR a `dev` o `main` pasa por dos checks de GitHub Actions: **CI**
+(`ci.yml`: tipos, migraciones sobre Postgres, schema sin migración
+pendiente, arranque y tests) y **Revisión IA** (`ai-review.yml`: Claude
+revisa con las reglas de este repo, comenta, aprueba o pide cambios en el
+PR como `github-actions[bot]`, y falla si hay bloqueantes).
+Están en el PR #2 (`feature/ci-cd` → `dev`), sin mergear. **El CI pasó
+en GitHub.** **La revisión IA todavía no corrió**: la action solo corre si
+`ai-review.yml` es idéntico al de la rama por defecto, y hoy la rama por
+defecto es `main`, donde no existe. Para destrabarlo: poner `dev` como
+rama por defecto y mergear el PR #2 a mano; desde ahí los PRs que salgan
+de `dev` se revisan. El secret de Claude y el permiso de Actions para
+aprobar PRs ya están cargados en GitHub; falta la protección de ramas. No
+hay despliegue (CD) todavía.
 
 Limitación del entorno: la política de la organización (Cencosud) tiene
 Remote Control deshabilitado, así que no se pueden aprobar permisos

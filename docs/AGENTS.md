@@ -86,7 +86,9 @@ puntero a este documento — no se copian las reglas.
 - La plataforma **no custodia dinero** (ver README §4). Cualquier cambio
   que se acerque a mover o guardar plata es una decisión de negocio y
   legal, no solo técnica: se consulta antes y se registra en `STATE.md`.
-- Trabajo en ramas propias, no directo en `main`.
+- Trabajo en ramas `feature/...` que salen de `dev` y vuelven a `dev` por
+  PR; `main` solo recibe PRs desde `dev` o `hotfix/*`. Cada PR pasa por
+  el CI y la revisión con IA ([`CI.md`](CI.md)).
 - El backend se organiza en módulos (`src/modules/<área>/` con
   `schemas.ts`, `service.ts`, `routes.ts`); la lógica va en el servicio,
   nunca en la ruta. Detalle y receta para agregar cosas en

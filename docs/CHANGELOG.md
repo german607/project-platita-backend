@@ -116,3 +116,47 @@ regla de mantenimiento en [`AGENTS.md`](AGENTS.md).
   firmar y con la identidad personal. El fallo inicial se produjo cuando
   la configuración del repo todavía resolvía la firma activada. Con la
   configuración actual la IA puede commitear.
+
+## 2026-10-12
+
+- Rama `feature/ci-cd` (desde `dev`): pipeline de PRs.
+  - `.github/workflows/ci.yml`: en PRs y pushes a `dev`/`main` instala
+    con `npm ci`, chequea tipos, aplica migraciones sobre Postgres 16,
+    falla si `schema.prisma` tiene cambios sin migración (`prisma migrate
+    diff`), compila, levanta la API y prueba `/health`, y corre los tests
+    si existen. Un job aparte rechaza PRs a `main` que no vengan de `dev`
+    o `hotfix/*`.
+  - `.github/workflows/ai-review.yml`: Claude
+    (`anthropics/claude-code-action@v1`) revisa cada PR no borrador con
+    las reglas de `docs/AGENTS.md` y los skills, deja comentarios
+    **[Bloqueante]**/**[Sugerencia]** y un resumen, y devuelve un
+    veredicto estructurado; el check falla si hay bloqueantes. El
+    veredicto se pasa por variable de entorno para evitar inyección en el
+    script.
+  - `.github/pull_request_template.md` con el checklist de las reglas.
+  - `docs/CI.md`: flujo de ramas, qué valida cada check y cómo configurar
+    el secret y la protección de ramas.
+- Se registró `dev` como rama de integración (estaba abierto en `STATE.md`).
+- Verificación: ambos workflows pasan actionlint y el paso del veredicto se
+  probó en local con resultados de ejemplo. Los pasos de npm/Prisma no se
+  pudieron correr en local porque el entorno de la IA no tiene acceso al
+  registro de npm; se validan en la primera corrida en GitHub.
+- `ai-review.yml`: además del check, la revisión deja una revisión formal en
+  el PR con el token de Actions (`github-actions[bot]`): **Approve** sin
+  bloqueantes, **Request changes** con bloqueantes. Germán habilitó en
+  GitHub el secret de Claude y "Allow GitHub Actions to create and approve
+  pull requests". Lógica del veredicto probada en local con `gh` simulado
+  (aprobar, cambios requeridos, sin veredicto, aprobación rechazada).
+- Se abrió el PR #2 (`feature/ci-cd` → `dev`), primera corrida del pipeline:
+  - **CI: pasó entero en GitHub** (`npm ci`, tipos, migraciones sobre
+    Postgres 16, schema sin migración pendiente, build y `/health`). Es la
+    primera verificación de esos pasos fuera de la máquina de Jerónimo.
+  - **Revisión IA: no corrió.** La action se saltea si `ai-review.yml`
+    difiere del de la rama por defecto (`main`), donde todavía no existe.
+    Es una medida de seguridad de la action, no un error de configuración.
+  - El paso del veredicto ahora distingue ese caso y lo explica, en vez de
+    sugerir que falta el secret.
+  - `actions/checkout` y `actions/setup-node` pasaron a `v5` por el aviso de
+    Node 20 deprecado en los runners.
+  - Recomendación registrada en `docs/CI.md`: rama por defecto del repo =
+    `dev`, para que los PRs lleven el mismo workflow que la rama por defecto.

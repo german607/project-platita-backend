@@ -104,8 +104,13 @@ Este es el **único backlog** del proyecto (ver `docs/AGENTS.md`). El estado gen
 ## 9. Infraestructura y despliegue (Backend)
 
 - [ ] **P0** Dockerfile de la API
-- [ ] **P0** CI en GitHub Actions: lint, typecheck, tests
-- [ ] **P1** Despliegue en un proveedor barato (Railway, Render o Fly.io) + Postgres gestionado
+- [x] **P0** CI en GitHub Actions: typecheck, migraciones, drift de schema, arranque y tests (`ci.yml`; ver `docs/CI.md`). Pasó en GitHub en el PR #2
+- [~] **P0** Revisión con IA en cada PR a `dev`/`main` que aprueba o pide cambios y bloquea el merge si hay problemas graves (`ai-review.yml`). No corrió todavía: necesita que el workflow exista en la rama por defecto
+- [ ] **P0** Poner `dev` como rama por defecto del repo y mergear el PR #2 a mano (la revisión IA no puede revisar el PR que la crea)
+- [x] **P0** Cargar en GitHub el secret de Claude y permitir que Actions apruebe PRs
+- [ ] **P0** Protección de ramas de `dev` y `main` con los checks requeridos y 1 aprobación (pasos en `docs/CI.md`; después de la primera corrida)
+- [ ] **P1** Lint (ESLint) como paso del CI
+- [ ] **P1** Despliegue en un proveedor barato (Railway, Render o Fly.io) + Postgres gestionado, automático desde `main` después del CI (CD)
 - [ ] **P1** Backups automáticos de la base
 - [ ] **P2** Monitoreo y alertas
 

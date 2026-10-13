@@ -137,7 +137,9 @@ La tabla de endpoints, la arquitectura del backend y las reglas del
 dominio viven en [`docs/BACKEND.md`](docs/BACKEND.md) (una sola copia, para
 que no se desactualice). Un caso de uso narrado que pasa por todos los
 endpoints está en [`docs/EJEMPLO.md`](docs/EJEMPLO.md). El estado actual
-del proyecto, en [`docs/STATE.md`](docs/STATE.md).
+del proyecto, en [`docs/STATE.md`](docs/STATE.md). El flujo de ramas y
+los checks automáticos de cada PR (CI y revisión con IA), en
+[`docs/CI.md`](docs/CI.md).
 
 ### Próximos pasos
 
