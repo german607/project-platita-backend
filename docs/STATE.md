@@ -50,8 +50,11 @@ revisa con las reglas de este repo, comenta, aprueba o pide cambios en el
 PR como `github-actions[bot]`, y falla si hay bloqueantes).
 Mergeados en `dev` con el PR #2. **El CI pasó en GitHub.** La rama por
 defecto del repo es `dev`, porque la action de Claude solo corre si
-`ai-review.yml` es idéntico al de la rama por defecto. La primera
-revisión IA real corre en el PR que actualiza este estado. El secret de Claude y el permiso de Actions para
+`ai-review.yml` es idéntico al de la rama por defecto. La revisión
+IA ya funcionó: aprobó el PR #3. Pendiente de merge (manual, porque
+cambia el workflow): `feature/revision-ia-resumen`, que hace que el
+resumen de Claude salga como texto de la revisión y que el error real
+aparezca en el check cuando Claude falla. El secret de Claude y el permiso de Actions para
 aprobar PRs ya están cargados en GitHub; falta la protección de ramas. No
 hay despliegue (CD) todavía.
 

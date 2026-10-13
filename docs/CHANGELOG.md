@@ -163,3 +163,18 @@ regla de mantenimiento en [`AGENTS.md`](AGENTS.md).
 - Germán puso `dev` como rama por defecto del repo y mergeó el PR #2 a
   mano. Rama `feature/estado-ci`: se actualizan `TODO.md` y `STATE.md` con
   eso; su PR es la primera prueba real de la revisión IA.
+- PR #3: la primera corrida de la revisión IA falló en 18 segundos sin
+  veredicto; era el secret. Germán lo reemplazó y al re-correr **Claude
+  revisó y `github-actions[bot]` aprobó el PR**. Es la primera revisión IA
+  real. Claude no publicó el comentario de resumen que pedía el prompt.
+- Rama `feature/revision-ia-resumen` (cambia `ai-review.yml`, así que
+  necesita merge manual):
+  - El resumen ya no depende de que Claude lo publique: viene en la salida
+    estructurada y el workflow lo usa como texto de la revisión
+    (approve/request changes). Se quitó `gh pr comment` de las
+    herramientas permitidas.
+  - Si Claude falla, el check muestra el error real (resultado, turnos y
+    herramientas denegadas) sacado de `$RUNNER_TEMP/claude-execution-output.json`,
+    porque los logs no siempre se pueden abrir desde donde se diagnostica.
+  - Probado en local con `gh` simulado: sin registro, error de credencial,
+    aprobado, cambios requeridos y workflow modificado.
