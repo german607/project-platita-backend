@@ -38,10 +38,14 @@ revisa el diff usando las reglas de `docs/AGENTS.md` y de los roles de
 
 - Deja comentarios en las líneas con problemas, marcados **[Bloqueante]** o
   **[Sugerencia]**.
-- Publica un comentario de resumen con el veredicto.
-- Deja una revisión formal en el PR, firmada por `github-actions[bot]`:
-  **Approve** si no hay bloqueantes, **Request changes** si los hay. Una
-  aprobación posterior reemplaza el "request changes" anterior.
+- Devuelve un veredicto estructurado (veredicto, cantidad de bloqueantes y
+  resumen). Con eso el workflow deja una revisión formal en el PR, firmada
+  por `github-actions[bot]`, con el resumen como texto: **Approve** si no hay
+  bloqueantes, **Request changes** si los hay. Una aprobación posterior
+  reemplaza el "request changes" anterior.
+- Si Claude falla (credencial inválida, límite de uso, etc.), el check
+  muestra el error real del registro de ejecución, sin tener que abrir el
+  log.
 - **El check falla si hay al menos un bloqueante**, y así bloquea el merge.
 
 La aprobación sirve para exigir "1 aprobación" en la protección de ramas

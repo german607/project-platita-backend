@@ -105,7 +105,8 @@ Este es el **único backlog** del proyecto (ver `docs/AGENTS.md`). El estado gen
 
 - [ ] **P0** Dockerfile de la API
 - [x] **P0** CI en GitHub Actions: typecheck, migraciones, drift de schema, arranque y tests (`ci.yml`; ver `docs/CI.md`). Pasó en GitHub en el PR #2
-- [~] **P0** Revisión con IA en cada PR a `dev`/`main` que aprueba o pide cambios y bloquea el merge si hay problemas graves (`ai-review.yml`). No corrió todavía: necesita que el workflow exista en la rama por defecto
+- [x] **P0** Revisión con IA en cada PR a `dev`/`main` que aprueba o pide cambios y bloquea el merge si hay problemas graves (`ai-review.yml`). Aprobó el PR #3
+- [~] **P1** Resumen de la revisión IA publicado por el workflow y error real de Claude visible en el check (rama `feature/revision-ia-resumen`)
 - [x] **P0** Poner `dev` como rama por defecto del repo y mergear el PR #2 a mano (la revisión IA no puede revisar el PR que la crea)
 - [x] **P0** Cargar en GitHub el secret de Claude y permitir que Actions apruebe PRs
 - [ ] **P0** Protección de ramas de `dev` y `main` con los checks requeridos y 1 aprobación (pasos en `docs/CI.md`; después de la primera corrida)

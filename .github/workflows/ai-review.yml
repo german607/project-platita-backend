@@ -79,16 +79,16 @@ jobs:
             - Por cada problema concreto, dejá un comentario en la línea con
               mcp__github_inline_comment__create_inline_comment, empezando con
               **[Bloqueante]** o **[Sugerencia]**, con el escenario que falla y el arreglo.
-            - Al final, publicá UN comentario de resumen con
-              `gh pr comment ${{ github.event.pull_request.number }} --body "..."` que empiece con
-              "## Revisión IA — <commit corto>", diga el veredicto (✅ Aprobado o
-              ❌ Cambios requeridos), liste los bloqueantes y las sugerencias principales.
+            - No publiques un comentario general: el resumen lo publica el workflow.
+            - Devolvé el veredicto en la salida estructurada. En `resumen` escribí
+              markdown breve: qué revisaste, la lista de bloqueantes (si hay) y las
+              sugerencias principales.
             - No apruebes por compromiso: si no hay bloqueantes, el veredicto es aprobar
               aunque haya sugerencias; si hay al menos uno, es cambios_requeridos.
 
           claude_args: |
             --max-turns 40
-            --allowedTools "Read,Grep,Glob,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*),Bash(git diff:*),Bash(git log:*),mcp__github_inline_comment__create_inline_comment"
+            --allowedTools "Read,Grep,Glob,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(git diff:*),Bash(git log:*),mcp__github_inline_comment__create_inline_comment"
             --json-schema '{"type":"object","properties":{"veredicto":{"type":"string","enum":["aprobar","cambios_requeridos"]},"bloqueantes":{"type":"integer","minimum":0},"resumen":{"type":"string"}},"required":["veredicto","bloqueantes","resumen"]}'
 
       - name: Aplicar el veredicto
@@ -97,40 +97,59 @@ jobs:
           # Se pasa por variable de entorno (nunca interpolado en el script)
           # porque el texto lo escribe la IA.
           RESULTADO: ${{ steps.review.outputs.structured_output }}
-          # Token de Actions: la aprobación la firma github-actions[bot].
+          # Token de Actions: la revisión la firma github-actions[bot].
           # Requiere "Allow GitHub Actions to create and approve pull requests".
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
+          COMMIT: ${{ github.event.pull_request.head.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           if [ -z "$RESULTADO" ]; then
             # Por seguridad, la action no corre si este workflow difiere del de la
             # rama por defecto: un PR no puede cambiar a su propio revisor.
-            DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
             if ! git diff --quiet "origin/$DEFAULT_BRANCH" -- .github/workflows/ai-review.yml 2>/dev/null; then
               echo "::error::Este PR modifica la revisión de IA (.github/workflows/ai-review.yml difiere de '$DEFAULT_BRANCH'), así que Claude no puede revisarlo. Necesita revisión y merge de una persona."
+              exit 1
+            fi
+            # Claude corrió pero falló: se muestra el error real en el check,
+            # sacado del registro de ejecución de la action.
+            EJECUCION="$RUNNER_TEMP/claude-execution-output.json"
+            if [ -f "$EJECUCION" ]; then
+              DETALLE=$(jq -r '[.[] | select(.type == "result")] | last
+                | if . == null then "sin mensaje de resultado"
+                  else "is_error=\(.is_error // false), turnos=\(.num_turns // "?"), resultado: \((.result // ((.errors // []) | join("; ")) // "") | tostring | .[0:400]), permisos denegados: \([(.permission_denials // [])[] | .tool_name] | unique | join(", "))"
+                  end' "$EJECUCION" 2>/dev/null | tr '\n' ' ')
+              echo "::error::La revisión de IA falló. Detalle: ${DETALLE:-no se pudo leer el registro}"
             else
-              echo "::error::La revisión de IA no terminó o no devolvió veredicto. Revisá el log del paso 'Revisar el PR' (¿secret ANTHROPIC_API_KEY o CLAUDE_CODE_OAUTH_TOKEN válido?)."
+              echo "::error::La revisión de IA no arrancó (no hay registro de ejecución). Revisá el secret CLAUDE_CODE_OAUTH_TOKEN o ANTHROPIC_API_KEY."
             fi
             exit 1
           fi
+
           VEREDICTO=$(echo "$RESULTADO" | jq -r '.veredicto')
           BLOQUEANTES=$(echo "$RESULTADO" | jq -r '.bloqueantes')
+          if [ "$VEREDICTO" = "aprobar" ] && [ "$BLOQUEANTES" = "0" ]; then
+            TITULO="✅ Aprobado"
+          else
+            TITULO="❌ Cambios requeridos ($BLOQUEANTES bloqueante(s))"
+          fi
           {
-            echo "## Revisión IA"
+            echo "## Revisión IA — ${COMMIT:0:7}"
             echo
-            echo "**Veredicto:** $VEREDICTO · **Bloqueantes:** $BLOQUEANTES"
+            echo "**$TITULO**"
             echo
             echo "$RESULTADO" | jq -r '.resumen'
-          } >> "$GITHUB_STEP_SUMMARY"
+          } > revision.md
+          cat revision.md >> "$GITHUB_STEP_SUMMARY"
+
           if [ "$VEREDICTO" != "aprobar" ] || [ "$BLOQUEANTES" != "0" ]; then
-            gh pr review "$PR" --request-changes \
-              --body "Revisión IA: $BLOQUEANTES problema(s) bloqueante(s). Detalle en los comentarios del PR." \
+            gh pr review "$PR" --request-changes --body-file revision.md \
               || echo "::warning::No se pudo dejar la revisión 'request changes' (¿está habilitado que Actions apruebe PRs?)."
-            echo "::error::La revisión de IA encontró $BLOQUEANTES problema(s) bloqueante(s). Ver los comentarios del PR."
+            echo "::error::La revisión de IA encontró $BLOQUEANTES problema(s) bloqueante(s). Ver la revisión en el PR."
             exit 1
           fi
           # La aprobación nueva reemplaza un "request changes" anterior del mismo bot.
-          if ! gh pr review "$PR" --approve --body "Revisión IA: sin bloqueantes."; then
+          if ! gh pr review "$PR" --approve --body-file revision.md; then
             echo "::error::La revisión de IA aprobó, pero GitHub rechazó la aprobación. Habilitá 'Allow GitHub Actions to create and approve pull requests' en Settings → Actions → General."
             exit 1
           fi
