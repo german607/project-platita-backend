@@ -290,3 +290,118 @@ no pudo ejecutar `tsc`, Prisma ni el servidor; todo se revisó leyendo):
 - Se fijó la versión de Node: `"engines": { "node": ">=22" }` en
   `package.json` y `.nvmrc` con `22`, para coincidir con el Dockerfile y el
   CI y evitar el `EBADENGINE`. Cierra el pendiente de `TODO.md` §1.
+
+## 2026-10-15 (hito: lado del cliente, partes 1 a 3)
+
+Pedido del frontend para el área de clientes. Rama nueva
+`jeronimo/perfil-publico-y-cliente` desde `origin/dev` (el PR #6 ya estaba
+mergeado). **Escrito sin poder compilar ni correr nada** (el entorno de la
+IA no ejecuta `tsc`, Prisma ni el servidor; se revisó leyendo):
+
+- **Perfil público** en `Merchant`: `description` (280), `photoUrl`
+  (http/https), `category` (enum `MerchantCategory`, nula hasta elegirla),
+  `categoryChangedAt`, `visible` (default `false`; los comercios
+  existentes quedan ocultos) y `openingHours` (JSON). Se edita con el
+  `PATCH /merchants/:id` que ya existía y todos los GET del comercio lo
+  devuelven (con los 7 días de horarios siempre).
+  - Categoría: primera vez libre; después 90 días entre cambios, si no 422
+    `CATEGORY_CHANGE_TOO_SOON` con `details.availableAt`. La misma
+    categoría no cuenta como cambio.
+  - `visible: true` exige un local activo y una categoría; si no, 422
+    `PROFILE_INCOMPLETE` con `details.missing`. (La exigencia de categoría
+    es una decisión de esta implementación: el pedido solo pedía el local,
+    pero el filtro y la tarjeta de `/places` la necesitan.)
+  - Horarios: `src/lib/opening-hours.ts` (validación `from < to`, sin
+    superposición, tramos ordenados; `24:00` permitido como cierre).
+- **Locales**: modelo `Location` y módulo `src/modules/locations/`
+  (`GET`/`POST /merchants/:id/locations`, `PATCH /locations/:id`, sin
+  DELETE). Decisión propia: no se puede dar de baja el único local activo
+  de un comercio visible (422 `LOCATION_REQUIRED_WHILE_VISIBLE`), para no
+  romper la regla de visibilidad; usa `lockMerchant` (nuevo, en
+  `merchants/service.ts`) para que "poner visible" y "dar de baja" no se
+  crucen.
+- **Lugares públicos**: módulo `src/modules/places/` con `GET /places` y
+  `GET /places/:merchantId`, sin sesión y con `select` explícito (nunca
+  teléfono, plan, clientes ni saldos). Un comercio no visible da el mismo
+  404 que uno inexistente. Orden por nombre con id de desempate.
+- Migración escrita a mano: `20261015120000_perfil_publico_y_locales`
+  (sin aplicar).
+- Consola `/dev`: variable `locationId` y los endpoints nuevos.
+- **Todavía no se hizo** (partes 4 a 7 del pedido): ingreso por código y
+  sesión, `GET /me/balances`, subida de foto y QR personal. Quedan en
+  `TODO.md` §12.
+- Contrato existente sin cambios: todo lo nuevo son campos y endpoints
+  nuevos (los GET/PATCH de comercio suman campos).
+
+## 2026-10-15 (verificación parcial)
+
+- El usuario corrió `npm run db:migrate` y `tsc --noEmit`: la migración
+  `20261015120000_perfil_publico_y_locales` se aplicó, Prisma informa la base
+  en sync (el SQL escrito a mano coincide) y `tsc` no mostró errores. La
+  lógica nueva sigue sin correrse. Prisma ofreció actualizar a 8.0.0-rc; no
+  se acepta (es un salto mayor y no es parte de este hito).
+
+## 2026-10-15 (decisión: se posterga login y seguridad del cliente)
+
+- El usuario decidió que **no se avanza por ahora** con el ingreso del
+  cliente por código, la sesión (`/auth/client/*`, `/me`), `GET
+  /me/balances`, el envío de códigos por WhatsApp o SMS ni el rate
+  limiting: se prueba primero lo ya hecho (perfil público, locales y
+  `/places`). Quedan en `TODO.md` §12 marcados como postergados. La
+  advertencia sigue vigente: la app del cliente **no se puede publicar**
+  sin la verificación real, porque sin ella cualquiera vería los saldos de
+  cualquier número. Mientras tanto el frontend simula el ingreso.
+
+## 2026-10-16 (usuario global, sin seguridad)
+
+Al probar desde el frontend se vio que no había forma de saber los saldos
+de "la persona" entre comercios: solo existían fichas `Customer` sueltas.
+Se crea la estructura de usuario, sin tocar login ni seguridad (siguen
+postergados). **Escrito sin poder compilar ni correr** (migración sin
+aplicar):
+
+- Modelo `User` (`phone` único normalizado, `name?`, `createdAt`) y
+  `Customer.userId` obligatorio. La migración
+  `20261016120000_usuarios_globales` crea un usuario por cada teléfono
+  distinto (id con `gen_random_uuid()`, primer nombre anotado) y enlaza las
+  fichas existentes antes de volver `userId` NOT NULL.
+- `POST /merchants/:id/customers` ahora busca o crea el usuario del
+  teléfono y cuelga la ficha de él. El nombre que anota el comercio solo
+  siembra el nombre del usuario cuando es nuevo, nunca lo pisa.
+- Módulo `src/modules/users/`: `POST /users` (busca o crea por teléfono),
+  `GET`/`PATCH /users/:id` y `GET /users/:id/balances` (saldos en cada
+  comercio con ficha, también con saldo 0, por última visita; del comercio
+  solo `id`, `name`, `category`, `photoUrl`). La lógica recibe el id del
+  usuario, así `/me/balances` la reusará con la sesión real.
+- **Estas rutas no verifican nada**: quien conozca un teléfono ve sus
+  saldos. Solo se registran si `INSECURE_USER_ROUTES` es verdadero (nueva
+  variable; por defecto, activas fuera de producción y apagadas en
+  producción). La imagen Docker corre con `NODE_ENV=production`, así que
+  ahí no existen salvo que se fuerce la variable.
+- Consola `/dev`: variable `userId` y la sección de usuarios.
+- Decisión: los saldos del usuario incluyen comercios no visibles (es su
+  propia plata); del comercio solo se expone el perfil público mínimo.
+
+## 2026-10-16 (verificación parcial)
+
+- El usuario corrió `npm run db:migrate` y `tsc --noEmit`: la migración
+  `20261016120000_usuarios_globales` se aplicó (con el relleno de usuarios), Prisma
+  informa la base en sync y `tsc` no mostró errores. La lógica de `users` y el
+  alta de ficha con usuario siguen sin correrse.
+
+- Se documentó en `BACKEND.md` (sección "Cómo se relacionan usuario, ficha
+  y comercio") el modelo: User (la persona, por teléfono) → Customer (ficha
+  por comercio, con el saldo de ese comercio) → Merchant; quién ve qué, y
+  que cargar saldo va al comercio y todavía no lo hace el cliente.
+
+## 2026-10-17 (userName en las fichas de cliente)
+
+Pedido del frontend: mostrar "Juanito (Juan)", el nombre que el comercio le
+puso al cliente y el que se puso la persona. Se agregó `userName` (el
+`User.name`, puede ser `null`) a las respuestas que traen una ficha:
+`POST /merchants/:id/customers`, `GET`/`PATCH /customers/:id`,
+`GET /merchants/:id/customers`, `GET /merchants/:id/inactive` y el objeto
+`customer` de `GET /merchants/:id/transactions`. Se pide con la misma
+consulta (`include` de `user.name`), sin ir a `/users` por cliente, y sale
+plano: nunca el objeto `user`. Campo nuevo y aditivo, sin migración. Los
+demás campos y `name` no cambian. **Escrito sin poder compilar ni correr.**

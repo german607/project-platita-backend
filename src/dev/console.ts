@@ -53,6 +53,8 @@ const PAGE = /* html */ `<!doctype html>
       <div><label for="v-merchantId">merchantId</label><input id="v-merchantId" placeholder="se completa al crear un comercio"></div>
       <div><label for="v-bonusRuleId">bonusRuleId</label><input id="v-bonusRuleId" placeholder="se completa al crear una regla"></div>
       <div><label for="v-customerId">customerId</label><input id="v-customerId" placeholder="se completa al crear un cliente"></div>
+      <div><label for="v-locationId">locationId</label><input id="v-locationId" placeholder="se completa al crear un local"></div>
+      <div><label for="v-userId">userId</label><input id="v-userId" placeholder="se completa al identificar un usuario"></div>
     </div>
   </div>
 
@@ -76,6 +78,37 @@ var ENDPOINTS = [
   { method: "GET", path: "/merchants/:merchantId", desc: "Un comercio." },
   { method: "PATCH", path: "/merchants/:merchantId", desc: "Edita campos sueltos del comercio (al menos uno).",
     body: { name: "Café de la Esquina (Pocitos)" } },
+
+  { section: "Perfil público y locales (lo edita el comercio)", method: "PATCH", path: "/merchants/:merchantId",
+    desc: "Perfil público: description (hasta 280, null la borra), photoUrl (URL http/https), category (CAFETERIA, BARBERIA_PELUQUERIA, PILATES_YOGA, PANADERIA, LAVADERO, OTRO; la primera vez es libre y después hay que esperar 90 días: 422 CATEGORY_CHANGE_TOO_SOON con details.availableAt), openingHours (semana tipo, un día sin tramos = cerrado) y visible (422 PROFILE_INCOMPLETE si falta un local activo o la categoría).",
+    body: { description: "Café de especialidad y panadería casera.", category: "CAFETERIA",
+      openingHours: { mon: [{ from: "09:00", to: "13:00" }, { from: "16:00", to: "20:00" }], tue: [{ from: "09:00", to: "20:00" }],
+        wed: [{ from: "09:00", to: "20:00" }], thu: [{ from: "09:00", to: "20:00" }], fri: [{ from: "09:00", to: "20:00" }],
+        sat: [{ from: "10:00", to: "14:00" }], sun: [] } } },
+  { method: "POST", path: "/merchants/:merchantId/locations", captures: "locationId",
+    desc: "Agrega un local. Solo cambia la dirección (texto); horarios, foto y categoría son del comercio.",
+    body: { label: "Pocitos", address: "Av. Brasil 2500, Pocitos" } },
+  { method: "GET", path: "/merchants/:merchantId/locations", desc: "Locales del comercio, también los dados de baja." },
+  { method: "PATCH", path: "/locations/:locationId",
+    desc: "Edita un local. active=false lo da de baja (no hay DELETE); 422 LOCATION_REQUIRED_WHILE_VISIBLE si es el único activo y el comercio aparece en la app.",
+    body: { address: "Av. Brasil 2501, Pocitos" } },
+  { method: "PATCH", path: "/merchants/:merchantId", desc: "Aparecer en la app: se ve en /places. Hace falta un local activo y una categoría.",
+    body: { visible: true } },
+
+  { section: "Usuarios (la persona; SIN verificación, solo desarrollo)", method: "POST", path: "/users", captures: "userId",
+    desc: "Se identifica con el teléfono: busca o crea el usuario global. SIN código ni sesión: quien conozca el teléfono entra. Se apaga en producción. Las fichas de cliente de los comercios (userId) cuelgan de este usuario, el mismo para todos los comercios.",
+    body: { phone: "099123456", name: "Juancito" } },
+  { method: "GET", path: "/users/:userId", desc: "El usuario." },
+  { method: "PATCH", path: "/users/:userId", desc: "El usuario cambia su propio nombre (null lo borra).",
+    body: { name: "Juan Pérez" } },
+  { method: "GET", path: "/users/:userId/balances",
+    desc: "Saldos del usuario en cada comercio donde tiene ficha, también con saldo 0. Última visita primero. Es la forma que tendrá GET /me/balances. Montos en centésimos." },
+
+  { section: "Lugares (público, lo ve el cliente)", method: "GET", path: "/places",
+    desc: "Comercios visibles, por nombre. Filtros: category, search (por nombre), paginado. Cada uno con locales activos y hasActivePromo. Sin datos de clientes.",
+    query: "limit=20" },
+  { method: "GET", path: "/places/:merchantId",
+    desc: "Detalle público: descripción, foto, locales, horarios (siempre los 7 días) y promos activas (montos en centésimos). 404 si el comercio no es visible." },
 
   { section: "Reglas de bonificación", method: "POST", path: "/merchants/:merchantId/bonus-rules", captures: "bonusRuleId",
     desc: "Cargando minTopUp pesos o más, recibe bonusAmount pesos de bono. Se aplica la regla activa de mayor mínimo.",
@@ -118,7 +151,7 @@ var ENDPOINTS = [
     query: "from=2026-10-13T00:00:00-03:00&to=2026-10-14T00:00:00-03:00&limit=50" }
 ];
 
-var VARS = ["merchantId", "bonusRuleId", "customerId"];
+var VARS = ["merchantId", "bonusRuleId", "customerId", "locationId", "userId"];
 var list = document.getElementById("list");
 
 function getVar(name) { return document.getElementById("v-" + name).value.trim(); }
