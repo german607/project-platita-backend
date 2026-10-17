@@ -112,7 +112,7 @@ export async function listTransactions(customerId: string, query: ListTransactio
 }
 
 // Libro mayor de TODO el comercio, del más nuevo al más viejo, con el
-// cliente de cada movimiento. `from` es inclusivo y `to` exclusivo.
+// cliente de cada movimiento (con `userName`). `from` es inclusivo y `to` exclusivo.
 export async function listMerchantTransactions(merchantId: string, query: ListMerchantTransactionsQuery) {
   await requireMerchant(merchantId);
 
@@ -122,9 +122,18 @@ export async function listMerchantTransactions(merchantId: string, query: ListMe
       type: query.type,
       createdAt: { gte: query.from, lt: query.to },
     },
-    include: { customer: { select: { id: true, name: true, phone: true } } },
+    include: { customer: { select: { id: true, name: true, phone: true, user: { select: { name: true } } } } },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     ...pageArgs(query),
   });
-  return toPage(rows, query.limit);
+  // `customer.userName` es el nombre de la persona (User.name, puede ser null);
+  // `customer.name` es como la anota este comercio.
+  const page = toPage(rows, query.limit);
+  return {
+    ...page,
+    data: page.data.map(({ customer: { user, ...customer }, ...transaction }) => ({
+      ...transaction,
+      customer: { ...customer, userName: user.name },
+    })),
+  };
 }

@@ -16,6 +16,17 @@ model Merchant {
   createdAt DateTime   @default(now())
   customers Customer[]
   bonuses   BonusRule[]
+  locations Location[]
+
+  // Perfil público (lo que ve el cliente en la app). Todo opcional.
+  description       String?
+  photoUrl          String?
+  category          MerchantCategory?
+  categoryChangedAt DateTime?         // último cambio de categoría (regla de 90 días)
+  visible           Boolean           @default(false) // "Aparecer en la app"
+  openingHours      Json?             // semana tipo, hora de Montevideo; ver src/lib/opening-hours.ts
+
+  @@index([visible, category])
 }
 
 enum Plan {
@@ -24,13 +35,40 @@ enum Plan {
   MULTI
 }
 
+enum MerchantCategory {
+  CAFETERIA
+  BARBERIA_PELUQUERIA
+  PILATES_YOGA
+  PANADERIA
+  LAVADERO
+  OTRO
+}
+
+// Local de un comercio. Lo único que cambia entre locales es la dirección
+// (texto: no hay mapa ni coordenadas). El saldo es del comercio, no del local.
+model Location {
+  id         String   @id @default(cuid())
+  merchantId String
+  merchant   Merchant @relation(fields: [merchantId], references: [id])
+  label      String?  // ej. "Pocitos"
+  address    String   // ej. "Av. Brasil 2500, Pocitos"
+  active     Boolean  @default(true) // no hay DELETE: se da de baja con active=false
+  createdAt  DateTime @default(now())
+
+  @@index([merchantId, active])
+}
+
 // Cliente final de un comercio. El saldo es cerrado: solo vale en ese comercio.
 model Customer {
   id           String        @id @default(cuid())
   merchantId   String
   merchant     Merchant      @relation(fields: [merchantId], references: [id])
+  // La persona real detrás de esta ficha: la misma en todos los comercios
+  // (se identifica por teléfono). El saldo sigue siendo de ESTA ficha.
+  userId       String
+  user         User          @relation(fields: [userId], references: [id])
   phone        String
-  name         String?
+  name         String?       // cómo lo anota el comercio; no es el nombre de la persona
   createdAt    DateTime      @default(now())
   lastVisitAt  DateTime?
   transactions Transaction[]
@@ -38,6 +76,18 @@ model Customer {
 
   @@unique([merchantId, phone])
   @@index([merchantId, lastVisitAt])
+  @@index([userId])
+}
+
+// Usuario global: la persona que va a los comercios, identificada por su
+// teléfono (normalizado). Distinto de Customer, que es una ficha por
+// comercio. Hoy se identifica sin verificar (ver src/modules/users).
+model User {
+  id        String     @id @default(cuid())
+  phone     String     @unique
+  name      String?    // nombre que elige la propia persona
+  createdAt DateTime   @default(now())
+  customers Customer[]
 }
 
 // Regla de bonificación: "cargá X y recibís X + bonus"

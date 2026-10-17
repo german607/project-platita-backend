@@ -9,7 +9,8 @@ Node + TypeScript (ESM, `module: NodeNext`), Fastify 5, Prisma 5 sobre
 PostgreSQL 16, Zod para validar. Entorno local con `docker-compose.yml`
 (Postgres) y `.env.example` (`DATABASE_URL`, `PORT`). Variables de
 entorno (todas validadas en `src/config.ts`): `DATABASE_URL`, `PORT`
-(default 3000), `NODE_ENV` y `CORS_ORIGINS` (orígenes del frontend
+(default 3000), `NODE_ENV` y `INSECURE_USER_ROUTES` (`true`/`false`; por defecto activas fuera de
+producción y apagadas en producción: ver Usuarios) y `CORS_ORIGINS` (orígenes del frontend
 separados por coma, ej. `https://app.platita.uy,http://localhost:5173`;
 vacío = sin CORS; nunca `*`). Con CORS habilitado se aceptan los headers
 `Content-Type`, `Authorization` e `Idempotency-Key`, los métodos GET,
@@ -30,6 +31,7 @@ src/
     schemas.ts         validaciones reutilizables (ids, pesos, teléfono UY, paginación)
     pagination.ts      pageArgs / toPage (cursor)
     money.ts           pesos ↔ centésimos
+    opening-hours.ts   horarios de atención: validación (Zod) y normalización
     phone.ts           normalización de teléfonos uruguayos
   modules/             un directorio por área del dominio
     index.ts           ÚNICO lugar donde se registran los módulos
@@ -37,6 +39,9 @@ src/
     bonus-rules/       reglas de bonificación
     customers/         clientes
     ledger/            libro mayor: cargas, cobros, ajustes, movimientos
+    locations/         locales de un comercio (solo cambia la dirección)
+    places/            vista PÚBLICA de comercios para el cliente (/places)
+    users/             el usuario global (la persona) y sus saldos; SIN verificación
   dev/console.ts       consola de pruebas /dev (solo fuera de producción)
 ```
 
@@ -68,6 +73,37 @@ Cada módulo tiene los mismos tres archivos:
 - **Tests:** `buildApp()` devuelve la app sin puerto, así que se prueba
   con `app.inject(...)`.
 
+## Cómo se relacionan usuario, ficha y comercio
+
+```
+User (la persona, por teléfono)
+ └── Customer (ficha en el comercio A, con el saldo de A)  ──  Merchant A
+ └── Customer (ficha en el comercio B, con el saldo de B)  ──  Merchant B
+```
+
+- **User**: la persona. Un teléfono, un usuario, el mismo en todos los
+  comercios. Es lo que identifica a quien usa la app del cliente.
+- **Customer** (la "ficha"): la persona vista desde UN comercio. Guarda el
+  nombre que le puso ese comercio y su último paso por ahí. Los
+  movimientos (`Transaction`) cuelgan de la ficha, **no** del usuario.
+- **Saldo**: es de la ficha, o sea del comercio ("saldo cerrado"). No se
+  guarda como número: se calcula sumando los movimientos cada vez que se
+  consulta. No hay saldo "global" de una persona.
+- **Quién ve qué**:
+  - El **comercio** ve sus propias fichas con su saldo (teléfono, nombre
+    que le puso, saldo, última visita). No ve al `User` ni los saldos de esa
+    persona en otros comercios.
+  - La **persona** (el usuario) ve el perfil público de los comercios
+    (`/places`) y, preguntando, sus saldos en cada comercio donde tiene
+    ficha (`/users/:id/balances`, luego `/me/balances`), también con saldo 0.
+- **Cargar saldo**: el dinero va al **comercio** (efectivo o su Mercado
+  Pago), no a Platita: la plataforma no custodia dinero (README §4). Hoy
+  solo el comercio registra la carga (`POST /customers/:id/topups`). Que
+  el cliente cargue por su cuenta desde la app está **sin hacer**
+  ("Próximamente"); es una decisión de negocio y legal antes que técnica.
+- **Verificación**: hoy no existe. Las rutas de usuario se identifican solo
+  con el teléfono y existen únicamente fuera de producción (ver Usuarios).
+
 ## Reglas del dominio ya cerradas
 
 - **Montos**: la API **recibe pesos** y la base **guarda centésimos**
@@ -96,6 +132,66 @@ Cada módulo tiene los mismos tres archivos:
   borran: se desactivan (`active: false`). Cada regla puede tener `name` y
   `description` opcionales y en los listados trae `timesUsed` (cuántos
   bonos salieron de ella).
+- **Perfil público del comercio** (`Merchant`): `description` (hasta 280),
+  `photoUrl` (URL http/https; la subida de archivos es otro hito),
+  `category` (`CAFETERIA`, `BARBERIA_PELUQUERIA`, `PILATES_YOGA`,
+  `PANADERIA`, `LAVADERO`, `OTRO`; nula hasta que se elige),
+  `categoryChangedAt`, `visible` ("Aparecer en la app", falso por
+  defecto) y `openingHours`. Se edita con `PATCH /merchants/:id` y el GET
+  del comercio lo devuelve. Todo es opcional.
+- **Categoría**: la primera vez se elige libre (y ahí arranca el
+  plazo). Después, si pasaron menos de 90 días desde `categoryChangedAt`,
+  422 `CATEGORY_CHANGE_TOO_SOON` con `details { availableAt }` (ISO). Elegir
+  la misma que ya tiene no cuenta como cambio. Si un comercio necesita
+  cambiarla antes, se corrige a mano en la base (no hay endpoint de
+  administración).
+- **Visibilidad**: `visible: true` exige al menos un local activo **y**
+  una categoría (la categoría se evalúa con la que quedaría tras ese
+  mismo PATCH); si falta algo, 422 `PROFILE_INCOMPLETE` con
+  `details { missing: ["location" | "category"] }` y un mensaje que dice
+  qué falta. Mientras el comercio sea visible, no se puede dar de baja su
+  único local activo (422 `LOCATION_REQUIRED_WHILE_VISIBLE`). Ambas
+  operaciones bloquean la fila del comercio, así no se cruzan.
+- **Horarios**: la semana tipo `{ mon, tue, wed, thu, fri, sat, sun }`,
+  cada día una lista de tramos `{ from, to }` en `HH:MM` (hora de
+  Montevideo; `to` puede ser `24:00`). Lista vacía o día ausente =
+  cerrado. Cada tramo con `from < to` y sin superponerse (que uno termine
+  donde empieza otro está bien); se guardan ordenados. El PATCH reemplaza
+  la semana completa y el GET devuelve siempre los 7 días.
+- **Locales** (`Location`): un comercio tiene uno o más. Solo la dirección
+  (texto) cambia entre locales; horarios, descripción, foto y categoría son
+  del comercio y el saldo también (vale en todos los locales). No hay mapa
+  ni coordenadas: el front arma "Cómo llegar". No hay DELETE: se da de baja
+  con `active: false`.
+- **Usuario** (`User`): la persona, identificada por su **teléfono**
+  normalizado (único). Es global: el mismo en todos los comercios. Cada
+  `Customer` (la ficha de un comercio) tiene un `userId` obligatorio que
+  lo referencia; el saldo sigue siendo de la ficha, o sea del comercio.
+  Al crear una ficha (`POST /merchants/:id/customers`) se busca o crea el
+  usuario de ese teléfono; el nombre que anota el comercio solo siembra el
+  nombre del usuario cuando es nuevo, nunca lo pisa (el nombre del usuario
+  lo cambia la propia persona). `Customer.name` sigue siendo "cómo lo anota
+  el comercio". Las respuestas que traen una ficha incluyen además
+  `userName` (el `User.name`, puede ser `null`): `POST`/`GET`/`PATCH` de
+  clientes, `GET /merchants/:id/customers`, `GET /merchants/:id/inactive` y
+  el objeto `customer` de `GET /merchants/:id/transactions`. Siempre plano
+  (`userName`), nunca el objeto `user`.
+- **Identificarse sin verificar** (`/users/*`): `POST /users` busca o crea
+  por teléfono y devuelve el usuario; `GET`/`PATCH /users/:id`;
+  `GET /users/:id/balances` devuelve los saldos de la persona en cada
+  comercio donde tiene ficha, incluso con saldo 0, ordenados por última
+  visita (los que nunca visitó, al final) y por nombre del comercio. **No
+  hay código ni sesión**: quien conozca un teléfono puede ver sus saldos.
+  Por eso estas rutas solo existen si `INSECURE_USER_ROUTES` es verdadero
+  (por defecto, fuera de producción). Son una simulación para armar el
+  lado del cliente: cuando exista el ingreso real se reemplazan por
+  `/me/*` con la misma lógica (las funciones de `users/service.ts` reciben
+  el id del usuario, no saben cómo se identificó).
+- **Lugares** (`/places`): vista pública (sin sesión) de los comercios con
+  `visible = true`. Solo expone el perfil público (nombre, categoría,
+  descripción, foto, locales activos, horarios y promos activas); nunca
+  teléfono, plan, clientes ni saldos. Un comercio no visible da el mismo
+  404 que uno inexistente. Orden por nombre (desempate por id).
 - **Idempotencia** (opcional): `POST /customers/:id/topups`, `/charges` y
   `/adjustments` aceptan el header `Idempotency-Key` (1 a 255
   caracteres). La clave se guarda por cliente, junto con un hash de la
@@ -137,8 +233,16 @@ Cada módulo tiene los mismos tres archivos:
 
 - `Merchant` — `id`, `name`, `phone?`, `plan` (`BASIC`/`PRO`/`MULTI`),
   `createdAt`.
-- `Customer` — `id`, `merchantId`, `phone`, `name?`, `lastVisitAt?`.
-  Único por (`merchantId`, `phone`). Índice (`merchantId`, `lastVisitAt`).
+- `Customer` — `id`, `merchantId`, `userId`, `phone`, `name?`,
+  `lastVisitAt?`. Único por (`merchantId`, `phone`). Índices
+  (`merchantId`, `lastVisitAt`) y (`userId`).
+- `Merchant` — `id`, `name`, `phone?`, `plan`, `createdAt` y el perfil
+  público: `description?`, `photoUrl?`, `category?`, `categoryChangedAt?`,
+  `visible` (default `false`), `openingHours?` (JSON). Índice
+  (`visible`, `category`).
+- `User` — `id`, `phone` (único), `name?`, `createdAt`.
+- `Location` — `merchantId`, `label?`, `address`, `active`, `createdAt`.
+  Índice (`merchantId`, `active`).
 - `BonusRule` — `merchantId`, `name?`, `description?`, `minTopUp`,
   `bonusAmount`, `active`. Índice (`merchantId`, `active`).
 - `Transaction` — `customerId`, `type` (`TOPUP`/`BONUS`/`CHARGE`/
@@ -150,7 +254,10 @@ Cada módulo tiene los mismos tres archivos:
 
 Los índices originales están en la migración
 `20261011173315_segunda_parte`; las columnas y la tabla nuevas, en
-`20261013150000_idempotencia_y_origen_de_bonos`.
+`20261013150000_idempotencia_y_origen_de_bonos` y
+`20261015120000_perfil_publico_y_locales` y
+`20261016120000_usuarios_globales` (crea un usuario por cada teléfono
+existente y enlaza las fichas).
 
 ## Endpoints
 
@@ -160,7 +267,16 @@ Los índices originales están en la migración
 | POST | `/merchants` | Crea un comercio |
 | GET | `/merchants` | Lista comercios (paginado) |
 | GET | `/merchants/:id` | Un comercio |
-| PATCH | `/merchants/:id` | Edita un comercio |
+| PATCH | `/merchants/:id` | Edita un comercio y su perfil público (categoría, visibilidad, horarios…) |
+| POST | `/users` | **Sin verificar, solo si `INSECURE_USER_ROUTES`.** Se identifica con el teléfono: busca o crea el usuario |
+| GET | `/users/:id` | **Sin verificar.** El usuario |
+| PATCH | `/users/:id` | **Sin verificar.** El usuario cambia su nombre |
+| GET | `/users/:id/balances` | **Sin verificar.** Saldos del usuario en cada comercio, `{ data: [{ merchant: {id,name,category,photoUrl}, balance, lastVisitAt }] }` |
+| GET | `/places?category=&search=` | **Público.** Comercios visibles con locales activos y `hasActivePromo` (paginado, por nombre) |
+| GET | `/places/:merchantId` | **Público.** Detalle: descripción, foto, locales, horarios y promos activas; 404 si no es visible |
+| GET | `/merchants/:merchantId/locations` | Locales del comercio (también los de baja) |
+| POST | `/merchants/:merchantId/locations` | Agrega un local |
+| PATCH | `/locations/:id` | Edita un local o lo da de baja (`active: false`) |
 | POST | `/merchants/:merchantId/bonus-rules` | Crea una regla de bonificación |
 | GET | `/merchants/:merchantId/bonus-rules` | Reglas del comercio, cada una con `timesUsed` |
 | GET | `/merchants/:merchantId/bonus-preview?amount=` | Qué regla y cuánto bono daría una carga de `amount` pesos (no registra nada) |
@@ -177,7 +293,7 @@ Los índices originales están en la migración
 | POST | `/customers/:id/adjustments` | Corrección manual con signo (acepta `Idempotency-Key`) |
 | GET | `/customers/:id/transactions?type=` | Libro mayor del cliente (paginado) |
 
-Ninguno tiene autenticación todavía.
+Ninguno tiene autenticación todavía (`/places` es público a propósito).
 
 ## Consola de pruebas (`/dev`)
 

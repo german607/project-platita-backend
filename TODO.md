@@ -45,7 +45,7 @@ Este es el **único backlog** del proyecto (ver `docs/AGENTS.md`). El estado gen
 - Decisión 2026-10-13: la autenticación **se posterga** y no se toca por ahora (el frontend usa un `merchantId` fijo por configuración). Cuando se haga: mantener las URLs actuales y solo verificar que `:merchantId` sea el del token, con un flag `AUTH_REQUIRED` para migrar sin cortar al frontend.
 - [ ] **P1** Usuarios por comercio (dueño / cajero) con permisos distintos
 - [~] **P1** ABM básico de comercios: alta, listado, detalle y edición (sin autenticación todavía)
-- [ ] **P1** Perfil del comercio: nombre, teléfono, logo, plan
+- [~] **P1** Perfil del comercio: nombre, teléfono, plan y perfil público (descripción, foto por URL, categoría, horarios, visibilidad); ver §12. Falta la subida del logo/foto
 - [ ] **P2** Recuperación de contraseña
 
 ## 3. Clientes y saldo (Backend)
@@ -61,6 +61,7 @@ Este es el **único backlog** del proyecto (ver `docs/AGENTS.md`). El estado gen
 - [~] **P1** Listado de clientes del comercio con saldo y búsqueda por nombre o teléfono (la búsqueda normaliza el teléfono y `?phone=` filtra exacto sin crear; sin verificar)
 - [~] **P1** Movimientos de todo el comercio: `GET /merchants/:id/transactions?from&to` con el cliente en cada fila (sin verificar)
 - [~] **P1** Saldo de cada cliente y `total` en `/inactive` (sin verificar)
+- [~] **P1** `userName` (el `User.name`, puede ser null) en las fichas de cliente: clientes, `/inactive` y el `customer` de `/merchants/:id/transactions` (2026-10-17; sin verificar)
 - [~] **P1** Ajustes manuales con signo y nota obligatoria (`POST /customers/:id/adjustments`)
 - [ ] **P1** Anulación de un movimiento (genera un ajuste inverso, nunca borra); hoy el ajuste es libre y no queda ligado al movimiento que corrige
 - [ ] **P1** QR personal del cliente para identificarse en el mostrador
@@ -147,3 +148,20 @@ Este es el **único backlog** del proyecto (ver `docs/AGENTS.md`). El estado gen
 - [ ] **P1** Colección de requests (Bruno o Postman) para pruebas manuales
 - [ ] **P1** Checklist de prueba manual en el celular del mostrador
 - [ ] **P2** Pruebas de carga básicas
+
+## 12. App del cliente: perfil público y lugares (Backend)
+
+Hito iniciado el 2026-10-15. La web tiene dos áreas con la misma API: comercio y cliente (la persona que va a los comercios; por ahora solo mira, cargar por su cuenta es "Próximamente").
+
+- [~] **P0** Perfil público del comercio: `description`, `photoUrl`, `category` (regla de 90 días: 422 `CATEGORY_CHANGE_TOO_SOON`), `visible` (422 `PROFILE_INCOMPLETE`) y `openingHours`, por `PATCH /merchants/:id` (migración escrita a mano, sin aplicar)
+- [~] **P0** Locales: `Location` con `label`, `address` y `active`; `GET`/`POST /merchants/:id/locations` y `PATCH /locations/:id` (sin DELETE; 422 `LOCATION_REQUIRED_WHILE_VISIBLE`)
+- [~] **P0** Lugares públicos: `GET /places` (filtros `category` y `search`, orden por nombre) y `GET /places/:merchantId` (404 si no es visible); sin datos de clientes
+- [ ] **Postergado 2026-10-15** (no se pide por ahora; se prueba primero lo demás) Ingreso del cliente por teléfono + código de un solo uso y sesión: `POST /auth/client/request-code`, `POST /auth/client/verify`, `GET`/`PATCH /me`, `POST /auth/logout`. **No se puede publicar sin la verificación real**; depende de un proveedor de WhatsApp/SMS (ver §5) y de rate limiting (§10)
+- [~] **P0** Usuario global (`User`, por teléfono) enlazado desde cada `Customer.userId`, con `POST /users`, `GET`/`PATCH /users/:id` y `GET /users/:id/balances` **sin verificación** y solo fuera de producción (2026-10-16; migración y `tsc` verificados, lógica sin correr)
+- [ ] **Postergado 2026-10-15** (depende de la sesión del cliente) `GET /me/balances` (misma lógica que `/users/:id/balances`): saldos del usuario verificado, juntando las filas `Customer` con su teléfono
+- [ ] **Postergado 2026-10-15** Rate limiting en los endpoints públicos (`/places`, `/auth/client/*`), por IP y por teléfono
+- [ ] **P2** Subida y almacenamiento de la foto del comercio (hoy solo la URL)
+- [ ] **P2** QR personal del cliente, diseñado sobre el usuario verificado (ver §3)
+- [ ] **P2** Orden alternativo de `/places` (más nuevos primero, o por cercanía si algún día hay coordenadas)
+- [ ] **P2** Endpoint de administración para cambiar la categoría antes de los 90 días (hoy se corrige a mano en la base)
+- [ ] **P1** Verificar corriendo lo del 2026-10-15 (migración y `tsc` ya verificados): perfil (categoría dos veces, visible sin local), locales (baja del único activo), `/places` con y sin promo, y que un comercio no visible dé 404

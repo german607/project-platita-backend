@@ -1,6 +1,6 @@
 # Estado actual — Platita
 
-> Última actualización: 2026-10-13. Esto es una foto del presente, se
+> Última actualización: 2026-10-15. Esto es una foto del presente, se
 > reescribe cuando deja de ser cierto — no es historial (eso es
 > [`CHANGELOG.md`](CHANGELOG.md)). Ver también [`../TODO.md`](../TODO.md)
 > y la regla de mantenimiento en [`AGENTS.md`](AGENTS.md).
@@ -21,8 +21,9 @@ apuntan a [`AGENTS.md`](AGENTS.md), que define la regla obligatoria
 (registrar cada cambio en `STATE`, `CHANGELOG` y `TODO.md` en el mismo
 cambio) y el orden de lectura. Las reglas viven solo en `docs/AGENTS.md`.
 La rama `jeronimo/contexto-y-docs` ya se mergeó en `dev` (PR #1) y se
-borró en local. Se trabaja en `jeronimo/reajustes-para-front`, creada
-desde `origin/dev` (2026-10-13), sin push. Este repo
+borró en local. `jeronimo/reajustes-para-front` también se mergeó (PR #6).
+Se trabaja en `jeronimo/perfil-publico-y-cliente`, creada desde
+`origin/dev` (2026-10-15), sin push. Este repo
 no firma commits (`commit.gpgsign false`, con la identidad personal vía
 `~/.gitconfig-personal`); la firma GPG de la configuración global solo
 aplica fuera de las carpetas personales.
@@ -104,6 +105,29 @@ la API sigue recibiendo pesos y devolviendo centésimos). WhatsApp a
 inactivos sigue sin construirse. Todo esto está **escrito pero sin
 verificar corriéndolo** (ver abajo).
 
+**Hito "lado del cliente" (2026-10-15, en curso):** la web tendrá dos
+áreas con la misma API, comercio y cliente (la persona que va a los
+comercios; por ahora solo mira). Hecho en esta rama, **escrito y sin
+verificar corriéndolo**: perfil público del comercio (`description`,
+`photoUrl`, `category` con regla de 90 días, `visible`, `openingHours`),
+locales (`Location`) y los endpoints públicos `GET /places` y
+`GET /places/:merchantId`. **Usuario global (2026-10-16):** existe el modelo `User` (la persona,
+identificada por teléfono) y cada ficha `Customer` de un comercio lo
+referencia con `userId`. Hay rutas **sin verificación** (`POST /users`,
+`GET`/`PATCH /users/:id`, `GET /users/:id/balances`) para armar y probar
+el lado del cliente; solo existen fuera de producción
+(`INSECURE_USER_ROUTES`). **Postergado por decisión del usuario
+(2026-10-15, no se pide por ahora)**: ingreso del cliente por código de un
+solo uso y sesión (`/auth/client/*`, `/me`), rate limiting, envío de
+códigos (WhatsApp/SMS), subida de la foto y QR personal. Cuando exista
+la sesión, `/me/balances` reusa la lógica de `users/service.ts`. Decisiones tomadas: un comercio solo aparece si
+activa "Aparecer en la app" (apagado por defecto); la categoría no se
+cambia antes de 90 días; un comercio puede tener varios locales y solo
+cambia la dirección (texto, sin mapa); el saldo es del comercio y vale en
+todos sus locales; `/places` es público (sin datos de clientes). El
+ingreso real del cliente es **obligatorio antes de publicar**: sin
+verificación cualquiera vería los saldos de cualquier número.
+
 Consola de pruebas local en `GET /dev` (`src/dev/console.ts`), con todos
 los endpoints en orden de uso; solo si `NODE_ENV !== "production"`.
 
@@ -147,6 +171,17 @@ editarlo la IA por una restricción del entorno).
   `.nvmrc`), igual que el Dockerfile y el CI. `@fastify/cors` trae
   `cookie@2.0.1`, que lo exige; con Node 20 solo daba un warning
   `EBADENGINE`. Con `nvm use` se elige la versión sola.
+- **Verificado el 2026-10-15 (por el usuario)**: `npm run db:migrate`
+  aplicó `20261015120000_perfil_publico_y_locales` y Prisma informa la base
+  en sync (el SQL escrito a mano coincide con el esquema), y `tsc
+  --noEmit` no mostró errores. **Sigue sin correrse** la lógica nueva:
+  perfil público (regla de categoría, visibilidad), locales y `/places`.
+- **Escrito el 2026-10-17 y sin verificar**: `userName` en las fichas de
+  cliente (ver CHANGELOG). Solo cambia consultas, sin migración.
+- **Verificado el 2026-10-16 (por el usuario)**: `npm run db:migrate` aplicó
+  `20261016120000_usuarios_globales` (con su relleno de usuarios) y Prisma
+  informa la base en sync, y `tsc --noEmit` no mostró errores. **Sigue sin
+  correrse** la lógica del módulo `users` ni el alta de ficha con usuario.
 - **Escrito y sin verificar en ejecución**: los endpoints nuevos, el
   bloqueo de cobros simultáneos, la normalización de teléfonos y la
   paginación. No se recorrió el flujo completo. Ver la lista "Verificar

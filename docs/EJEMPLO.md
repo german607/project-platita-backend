@@ -216,6 +216,10 @@ movimiento.
 > encuentra a `+59899123456`), y `?phone=099123456` busca el teléfono
 > exacto sin crear nada.
 
+Cada ficha trae `name` (como la anota Pablo, ej. "Juancito") y `userName`
+(el nombre que la persona se puso, ej. "Juan"; `null` si no eligió
+uno), así la pantalla puede mostrar "Juancito (Juan)".
+
 Y a fin de día mira todo lo que pasó en el mostrador, de todos sus
 clientes:
 
@@ -238,6 +242,91 @@ Con esa lista, Pablo (o más adelante la plataforma, con un clic) le
 mandaría a Juancito una promo por WhatsApp. **Esa parte todavía no
 existe**: es el siguiente módulo a construir (ver
 [`TODO.md`](../TODO.md)).
+
+## Escena 9: Pablo aparece en la app
+
+Los clientes ahora pueden mirar los comercios desde la app. Por defecto
+nadie aparece: Pablo tiene que activarlo. Primero completa su perfil
+público (lo hace él, desde la pestaña "Mi comercio").
+
+> ▶ **`PATCH /merchants/m_pablo`**: descripción, categoría y horarios.
+> ```json
+> {
+>   "description": "Cortes y barba en Pocitos, sin turno.",
+>   "category": "BARBERIA_PELUQUERIA",
+>   "openingHours": {
+>     "mon": [], "tue": [{ "from": "10:00", "to": "20:00" }],
+>     "wed": [{ "from": "10:00", "to": "20:00" }], "thu": [{ "from": "10:00", "to": "20:00" }],
+>     "fri": [{ "from": "10:00", "to": "13:00" }, { "from": "15:00", "to": "20:00" }],
+>     "sat": [{ "from": "10:00", "to": "14:00" }], "sun": []
+>   }
+> }
+> ```
+> La categoría se elige libre la primera vez. Si Pablo quisiera cambiarla
+> a los 20 días: `422 CATEGORY_CHANGE_TOO_SOON` con
+> `details { "availableAt": "2027-01-13T..." }` (90 días después).
+
+Quiere aparecer ya, pero todavía no cargó ningún local:
+
+> ▶ **`PATCH /merchants/m_pablo`** con `{ "visible": true }` → `422`
+> `{ "code": "PROFILE_INCOMPLETE", "error": "Para aparecer en la app falta: al menos un local activo", "details": { "missing": ["location"] } }`
+
+> ▶ **`POST /merchants/m_pablo/locations`**: agrega su local. Solo la
+> dirección (texto; el front arma el "Cómo llegar").
+> ```json
+> { "label": "Pocitos", "address": "Av. Brasil 2500, Pocitos" }
+> ```
+> ▶ **`GET /merchants/m_pablo/locations`**: sus locales, también los de baja.
+> ▶ **`PATCH /locations/l_pocitos`**: corrige la dirección o lo da de baja
+> con `{ "active": false }` (no se borran). Mientras Pablo aparezca en la
+> app no puede dar de baja su único local: `422 LOCATION_REQUIRED_WHILE_VISIBLE`.
+
+Ahora sí:
+
+> ▶ **`PATCH /merchants/m_pablo`** con `{ "visible": true }` → `200`.
+
+Una clienta, sin iniciar sesión, mira qué hay en el barrio:
+
+> ▶ **`GET /places?category=BARBERIA_PELUQUERIA`**: lugares visibles, por
+> nombre.
+> → `{ "data": [ { "id": "m_pablo", "name": "Peluquería Don Pablo", "category": "BARBERIA_PELUQUERIA", "photoUrl": null, "locations": [ { "label": "Pocitos", "address": "Av. Brasil 2500, Pocitos" } ], "hasActivePromo": true } ], "nextCursor": null }`
+
+> ▶ **`GET /places/m_pablo`**: el detalle, con horarios (siempre los 7
+> días) y las promos activas (montos en centésimos).
+> → `{ "id": "m_pablo", ..., "openingHours": { "mon": [], "tue": [ ... ], ... }, "promos": [ { "id": "r_promo3", "name": "Promo 3 cortes", "description": null, "minTopUp": 100000, "bonusAmount": 20000 } ] }`
+
+Si Pablo se desactiva (`visible: false`), o el comercio no existe,
+`GET /places/m_pablo` responde el mismo `404`: no se revela que existe.
+Nada de lo que ve la clienta incluye datos de otros clientes, su teléfono
+ni su plan.
+
+## Escena 10: Juancito mira sus saldos desde la app
+
+Juancito ya tenía ficha en la peluquería de Pablo. Ahora abre la app del
+cliente. Todavía **no hay código ni sesión** (queda para después): se
+identifica solo con su teléfono, y eso sirve únicamente fuera de producción.
+
+> ▶ **`POST /users`**: busca o crea a la persona por teléfono.
+> ```json
+> { "phone": "099 123 456", "name": "Juancito" }
+> ```
+> → `{ "id": "u_juancito", "phone": "+59899123456", "name": "Juancito", ... }`
+
+Es el **mismo** `u_juancito` en todos los comercios: cuando la
+peluquería creó su ficha (escena 3), el sistema ya había creado este
+usuario, y la ficha `c_juancito` guarda `userId: "u_juancito"`. Si mañana
+va al café de la esquina y lo anotan con el mismo teléfono, ese comercio
+crea su propia ficha (con su propio saldo) colgando del mismo usuario.
+
+> ▶ **`GET /users/u_juancito/balances`**: sus saldos, comercio por comercio.
+> → `{ "data": [ { "merchant": { "id": "m_pablo", "name": "Peluquería Don Pablo", "category": "BARBERIA_PELUQUERIA", "photoUrl": null }, "balance": 0, "lastVisitAt": "2026-10-15T..." } ] }`
+> Incluye los comercios con saldo 0 y va ordenado por última visita.
+
+> ▶ **`PATCH /users/u_juancito`**: él elige cómo se llama.
+> ```json
+> { "name": "Juan Pérez" }
+> ```
+> (Es el nombre de la persona. El que anota cada comercio, `Customer.name`, no cambia.)
 
 ---
 
@@ -265,6 +354,15 @@ existe**: es el siguiente módulo a construir (ver
 | 18 | `GET /merchants/:id/inactive` | Clientes a reactivar | 8 |
 | 19 | `GET /merchants/:id/bonus-preview` | Ver el bono antes de cargar | 4 |
 | 20 | `GET /merchants/:id/transactions` | Movimientos del día del comercio | 7 |
+| 21 | `POST /merchants/:id/locations` | Cargar el local | 9 |
+| 22 | `GET /merchants/:id/locations` | Ver los locales | 9 |
+| 23 | `PATCH /locations/:id` | Corregir o dar de baja un local | 9 |
+| 24 | `GET /places` | La clienta explora los lugares (público) | 9 |
+| 25 | `GET /places/:merchantId` | Detalle de un lugar (público) | 9 |
+| 26 | `POST /users` | Identificarse por teléfono (sin verificar) | 10 |
+| 27 | `GET /users/:id` | El usuario | 10 |
+| 28 | `PATCH /users/:id` | Cambiar su nombre | 10 |
+| 29 | `GET /users/:id/balances` | Saldos en cada comercio | 10 |
 
 ## Lo que el cuento deja ver que falta
 
