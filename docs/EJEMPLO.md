@@ -300,11 +300,12 @@ Si Pablo se desactiva (`visible: false`), o el comercio no existe,
 Nada de lo que ve la clienta incluye datos de otros clientes, su teléfono
 ni su plan.
 
-## Escena 10: Juancito mira sus saldos desde la app
+## Escena 10: Juancito mira sus saldos desde la app (ingreso simulado)
 
 Juancito ya tenía ficha en la peluquería de Pablo. Ahora abre la app del
-cliente. Todavía **no hay código ni sesión** (queda para después): se
-identifica solo con su teléfono, y eso sirve únicamente fuera de producción.
+cliente. Esta escena es el **ingreso simulado**, que se retira cuando el
+front pase al real (escena 11): se identifica solo con su teléfono, y eso
+sirve únicamente fuera de producción.
 
 > ▶ **`POST /users`**: busca o crea a la persona por teléfono.
 > ```json
@@ -327,6 +328,44 @@ crea su propia ficha (con su propio saldo) colgando del mismo usuario.
 > { "name": "Juan Pérez" }
 > ```
 > (Es el nombre de la persona. El que anota cada comercio, `Customer.name`, no cambia.)
+
+## Escena 11: Juancito entra de verdad
+
+Ahora Juancito entra con un código que le llega al celular. No hay usuario ni
+contraseña.
+
+> ▶ **`POST /auth/request-code`**: escribe su celular.
+> ```json
+> { "phone": "099 123 456" }
+> ```
+> → `204` (sin cuerpo). Responde igual si el teléfono ya existía o no. Si
+> pide otro código antes de 30 segundos: `429 TOO_MANY_REQUESTS` con
+> `details.retryAfterSeconds`. Si escribe `123`: `400 INVALID_PHONE`.
+
+Le llega un código de 6 dígitos (en desarrollo, con el proveedor `dev`, el
+único válido es `000000` y `GET /auth/config` lo avisa).
+
+> ▶ **`POST /auth/verify-code`**: escribe el código.
+> ```json
+> { "phone": "099 123 456", "code": "000000" }
+> ```
+> → `200 { "token": "…", "expiresAt": "2026-12-17T…", "user": { "id": "u_juancito", "phone": "+59899123456", "phoneVerifiedAt": "2026-10-18T…", ... } }`
+
+Si se equivoca: `422 CODE_INCORRECT` (con `details.attemptsLeft`); si pasan
+más de 5 minutos o ya lo usó: `422 CODE_EXPIRED`; a los 5 intentos fallidos:
+`429 TOO_MANY_ATTEMPTS` y tiene que pedir un código nuevo.
+
+Como Pablo ya lo había anotado por su teléfono, `u_juancito` es el mismo
+usuario de la escena 3: no se crea otro. Desde acá, la app manda
+`Authorization: Bearer <token>` y nunca un id.
+
+> ▶ **`GET /me`**, **`PATCH /me`** (`{ "name": "Juan Pérez" }`) y
+> **`GET /me/balances`**: su perfil y sus saldos en cada comercio, con la
+> misma forma que la escena 10. Con un token falso, vencido o cerrado:
+> `401 INVALID_SESSION`, y la app vuelve a pedir código.
+
+> ▶ **`POST /auth/logout`**: cierra la sesión (204); el token deja de servir
+> al instante.
 
 ---
 
@@ -363,6 +402,12 @@ crea su propia ficha (con su propio saldo) colgando del mismo usuario.
 | 27 | `GET /users/:id` | El usuario | 10 |
 | 28 | `PATCH /users/:id` | Cambiar su nombre | 10 |
 | 29 | `GET /users/:id/balances` | Saldos en cada comercio | 10 |
+| 30 | `GET /auth/config` | Qué proveedor de códigos hay | 11 |
+| 31 | `POST /auth/request-code` | Pedir el código | 11 |
+| 32 | `POST /auth/verify-code` | Verificar y abrir la sesión | 11 |
+| 33 | `GET /me`, `PATCH /me` | Ver y cambiar su perfil | 11 |
+| 34 | `GET /me/balances` | Sus saldos con sesión real | 11 |
+| 35 | `POST /auth/logout` | Cerrar la sesión | 11 |
 
 ## Lo que el cuento deja ver que falta
 

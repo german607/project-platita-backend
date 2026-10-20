@@ -54,9 +54,9 @@ Este es el **único backlog** del proyecto (ver `docs/AGENTS.md`). El estado gen
 - [x] Consulta de saldo
 - [x] Carga con bonificación
 - [x] Cobro descontando saldo
-- [~] **P0** Evitar sobregiro con cobros concurrentes: cobros y ajustes corren en una transacción con `SELECT … FOR UPDATE` sobre el cliente; falta el test de concurrencia
+- [x] **P0** Evitar sobregiro con cobros concurrentes: cobros y ajustes corren en una transacción con `SELECT … FOR UPDATE` sobre el cliente; verificado por `tests/idempotency.test.ts` (dos cobros simultáneos: uno pasa, el otro da 422)
 - [~] **P0** Normalizar teléfonos uruguayos (09X XXX XXX → +5989XXXXXXX) (`src/lib/phone.ts`; sin tests)
-- [~] **P0** Idempotencia en cargas, cobros y ajustes: header `Idempotency-Key` **opcional** (`src/lib/idempotency.ts`, tabla `IdempotencyKey`, 48 h); falta correrla y los tests. Hacerla obligatoria es decisión futura
+- [x] **P0** Idempotencia en cargas, cobros y ajustes: header `Idempotency-Key` **opcional** (`src/lib/idempotency.ts`, tabla `IdempotencyKey`, 48 h); verificada por los tests (misma clave, otro cuerpo, otra operación, errores no guardados, pedidos simultáneos). Hacerla obligatoria es decisión futura
 - [~] **P1** Historial de movimientos por cliente, paginado (`GET /customers/:id/transactions`)
 - [~] **P1** Listado de clientes del comercio con saldo y búsqueda por nombre o teléfono (la búsqueda normaliza el teléfono y `?phone=` filtra exacto sin crear; sin verificar)
 - [~] **P1** Movimientos de todo el comercio: `GET /merchants/:id/transactions?from&to` con el cliente en cada fila (sin verificar)
@@ -140,11 +140,11 @@ Este es el **único backlog** del proyecto (ver `docs/AGENTS.md`). El estado gen
 
 - [ ] **P0** Recorrer a mano el flujo completo en `/dev` tras el refactor a módulos, con los casos de error (id inexistente, saldo insuficiente, teléfono inválido); hay un caso narrado en `docs/EJEMPLO.md`
 - [ ] **P0** Plan de pruebas del flujo principal: alta de cliente → carga con bono → cobro → saldo
-- [ ] **P0** Tests de integración contra Postgres real (vitest)
+- [x] **P0** Tests de integración contra Postgres real (vitest): `npm test`, carpeta `tests/`, base aparte `platita_test`; 42 tests en verde (2026-10-18): ingreso, idempotencia y perfil/lugares. La cobertura sigue siendo parcial (faltan ledger, bonificaciones, clientes y aislamiento entre comercios)
 - [ ] **P0** Casos borde de saldo: saldo exacto, insuficiente, montos con decimales, cobros concurrentes
 - [ ] **P0** Tests de aislamiento entre comercios (un comercio no ve ni opera clientes de otro)
-- [ ] **P0** Verificar corriendo lo del 2026-10-13: recorrer (migración, `npm install` y `tsc` ya verificados) idempotencia (mismo cuerpo, otro cuerpo, concurrente), preview, movimientos del comercio, búsqueda por teléfono e inactivos
-- [ ] **P1** Tests de idempotencia
+- [ ] **P0** Verificar corriendo lo del 2026-10-13 que los tests todavía no cubren: vista previa del bono, movimientos del comercio, búsqueda por teléfono e inactivos (idempotencia y cobros simultáneos ya verificados por `tests/`)
+- [x] **P1** Tests de idempotencia (en `tests/idempotency.test.ts`, incluye cobros simultáneos; sin correr)
 - [ ] **P1** Colección de requests (Bruno o Postman) para pruebas manuales
 - [ ] **P1** Checklist de prueba manual en el celular del mostrador
 - [ ] **P2** Pruebas de carga básicas
@@ -153,15 +153,21 @@ Este es el **único backlog** del proyecto (ver `docs/AGENTS.md`). El estado gen
 
 Hito iniciado el 2026-10-15. La web tiene dos áreas con la misma API: comercio y cliente (la persona que va a los comercios; por ahora solo mira, cargar por su cuenta es "Próximamente").
 
-- [~] **P0** Perfil público del comercio: `description`, `photoUrl`, `category` (regla de 90 días: 422 `CATEGORY_CHANGE_TOO_SOON`), `visible` (422 `PROFILE_INCOMPLETE`) y `openingHours`, por `PATCH /merchants/:id` (migración escrita a mano, sin aplicar)
-- [~] **P0** Locales: `Location` con `label`, `address` y `active`; `GET`/`POST /merchants/:id/locations` y `PATCH /locations/:id` (sin DELETE; 422 `LOCATION_REQUIRED_WHILE_VISIBLE`)
-- [~] **P0** Lugares públicos: `GET /places` (filtros `category` y `search`, orden por nombre) y `GET /places/:merchantId` (404 si no es visible); sin datos de clientes
-- [ ] **Postergado 2026-10-15** (no se pide por ahora; se prueba primero lo demás) Ingreso del cliente por teléfono + código de un solo uso y sesión: `POST /auth/client/request-code`, `POST /auth/client/verify`, `GET`/`PATCH /me`, `POST /auth/logout`. **No se puede publicar sin la verificación real**; depende de un proveedor de WhatsApp/SMS (ver §5) y de rate limiting (§10)
+- [x] **P0** Perfil público del comercio: `description`, `photoUrl`, `category` (regla de 90 días: 422 `CATEGORY_CHANGE_TOO_SOON`), `visible` (422 `PROFILE_INCOMPLETE`) y `openingHours`, por `PATCH /merchants/:id` (verificado por los tests y probado con el frontend)
+- [x] **P0** Locales: `Location` con `label`, `address` y `active`; `GET`/`POST /merchants/:id/locations` y `PATCH /locations/:id` (sin DELETE; 422 `LOCATION_REQUIRED_WHILE_VISIBLE`) (verificado por los tests)
+- [x] **P0** Lugares públicos: `GET /places` (filtros `category` y `search`, orden por nombre) y `GET /places/:merchantId` (404 si no es visible); sin datos de clientes (verificado por los tests)
+- [x] **P0** Ingreso del cliente por teléfono + código de un solo uso y sesión (2026-10-18; verificado con el proveedor `dev` por los tests; falta probarlo con el frontend y con un proveedor real): `GET /auth/config`, `POST /auth/request-code`, `POST /auth/verify-code`, `POST /auth/logout`, `GET`/`PATCH /me`. Token opaco único (sin JWT ni refresh), límites por teléfono e IP, 5 intentos y 5 minutos por código. Proveedor `dev` (acepta 000000). **No se puede publicar sin un proveedor real**: ver el ítem de Twilio abajo
 - [~] **P0** Usuario global (`User`, por teléfono) enlazado desde cada `Customer.userId`, con `POST /users`, `GET`/`PATCH /users/:id` y `GET /users/:id/balances` **sin verificación** y solo fuera de producción (2026-10-16; migración y `tsc` verificados, lógica sin correr)
-- [ ] **Postergado 2026-10-15** (depende de la sesión del cliente) `GET /me/balances` (misma lógica que `/users/:id/balances`): saldos del usuario verificado, juntando las filas `Customer` con su teléfono
-- [ ] **Postergado 2026-10-15** Rate limiting en los endpoints públicos (`/places`, `/auth/client/*`), por IP y por teléfono
+- [x] **P0** `GET /me/balances` (misma lógica que `/users/:id/balances`, con la sesión real): saldos del usuario verificado, juntando las filas `Customer` con su teléfono (verificado por los tests)
+- [x] **P1** Rate limiting del ingreso (`/auth/request-code`: por teléfono e IP, en la base). Verificado por los tests. Falta el de `/places` y los endpoints públicos (`/places`, `/auth/client/*`), por IP y por teléfono
+- [~] **P0** Proveedor real de códigos: `otp/twilio.ts` (Twilio Verify por SMS, con `fetch`, sin SDK), escrito el 2026-10-20 y verificado con `tsc` y tests contra un `fetch` simulado (72 tests en verde); falta mandar un SMS real a un número verificado de la cuenta de prueba. Credenciales solo en variables de entorno
+- [ ] **P1** Confirmar en la web oficial de Twilio el precio por verificación a Uruguay, el crédito de prueba y si Uruguay exige registrar el nombre del remitente de los SMS; revisar que el servicio de Verify tenga códigos de 6 dígitos
+- [ ] **P2** Credencial de Twilio con API Key (`SK…`) en vez del Auth Token de la cuenta, para poder revocarla sin tocar la cuenta
+- [ ] **P0** Quitar `/users/*` y `INSECURE_USER_ROUTES` cuando el front use `/me/*`
+- [ ] **P1** Producción con `OTP_PROVIDER` real, límites activos y `TRUST_PROXY` según el despliegue
 - [ ] **P2** Subida y almacenamiento de la foto del comercio (hoy solo la URL)
 - [ ] **P2** QR personal del cliente, diseñado sobre el usuario verificado (ver §3)
 - [ ] **P2** Orden alternativo de `/places` (más nuevos primero, o por cercanía si algún día hay coordenadas)
 - [ ] **P2** Endpoint de administración para cambiar la categoría antes de los 90 días (hoy se corrige a mano en la base)
-- [ ] **P1** Verificar corriendo lo del 2026-10-15 (migración y `tsc` ya verificados): perfil (categoría dos veces, visible sin local), locales (baja del único activo), `/places` con y sin promo, y que un comercio no visible dé 404
+- [ ] **P1** Verificar corriendo lo que los tests no cubren de 2026-10-15/16: el relleno de usuarios de la migración `usuarios_globales` sobre una base con datos reales y las rutas `/users` con `INSECURE_USER_ROUTES=false` (perfil, locales y `/places` ya verificados por `tests/`)
+- [ ] **P2** Revisar las 6 vulnerabilidades de `npm audit` en dependencias de desarrollo (vitest 2: vite y esbuild; producción está limpia, `npm audit --omit=dev` da 0): probar una versión más nueva de vitest. No usar `npm audit fix --force`

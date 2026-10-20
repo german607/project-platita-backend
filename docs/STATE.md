@@ -1,6 +1,6 @@
 # Estado actual — Platita
 
-> Última actualización: 2026-10-15. Esto es una foto del presente, se
+> Última actualización: 2026-10-18. Esto es una foto del presente, se
 > reescribe cuando deja de ser cierto — no es historial (eso es
 > [`CHANGELOG.md`](CHANGELOG.md)). Ver también [`../TODO.md`](../TODO.md)
 > y la regla de mantenimiento en [`AGENTS.md`](AGENTS.md).
@@ -20,10 +20,10 @@ mismo patrón que `iwant` y `cajon`: `CLAUDE.md` y `AGENTS.md` en la raíz
 apuntan a [`AGENTS.md`](AGENTS.md), que define la regla obligatoria
 (registrar cada cambio en `STATE`, `CHANGELOG` y `TODO.md` en el mismo
 cambio) y el orden de lectura. Las reglas viven solo en `docs/AGENTS.md`.
-La rama `jeronimo/contexto-y-docs` ya se mergeó en `dev` (PR #1) y se
-borró en local. `jeronimo/reajustes-para-front` también se mergeó (PR #6).
-Se trabaja en `jeronimo/perfil-publico-y-cliente`, creada desde
-`origin/dev` (2026-10-15), sin push. Este repo
+Las ramas de Jerónimo ya se mergearon en `dev` por PR y GitHub las borró
+del remoto: `jeronimo/contexto-y-docs` (PR #1), `jeronimo/reajustes-para-front`
+(PR #6) y `jeronimo/perfil-publico-y-cliente` (PR #7, 2026-10-17). Cada
+tarea nueva sale de `origin/dev` actualizado (`git fetch --prune`). Este repo
 no firma commits (`commit.gpgsign false`, con la identidad personal vía
 `~/.gitconfig-personal`); la firma GPG de la configuración global solo
 aplica fuera de las carpetas personales.
@@ -105,7 +105,7 @@ la API sigue recibiendo pesos y devolviendo centésimos). WhatsApp a
 inactivos sigue sin construirse. Todo esto está **escrito pero sin
 verificar corriéndolo** (ver abajo).
 
-**Hito "lado del cliente" (2026-10-15, en curso):** la web tendrá dos
+**Hito "lado del cliente" (2026-10-15, en curso; primera parte mergeada en `dev` con el PR #7 el 2026-10-17):** la web tendrá dos
 áreas con la misma API, comercio y cliente (la persona que va a los
 comercios; por ahora solo mira). Hecho en esta rama, **escrito y sin
 verificar corriéndolo**: perfil público del comercio (`description`,
@@ -127,6 +127,19 @@ cambia la dirección (texto, sin mapa); el saldo es del comercio y vale en
 todos sus locales; `/places` es público (sin datos de clientes). El
 ingreso real del cliente es **obligatorio antes de publicar**: sin
 verificación cualquiera vería los saldos de cualquier número.
+
+**Ingreso real del cliente (2026-10-18, verificado con el proveedor
+`dev` por los tests):** código de 6 dígitos por mensaje y sesión (`/auth/*`, `/me/*`),
+con el plan que armó el frontend (`PLAN-INGRESO-REAL.md` en su repo) y estas
+decisiones: un solo token opaco guardado con hash (sin JWT ni refresh), 60
+días que se renuevan al usarlo; códigos de 5 minutos y 5 intentos; límites
+por teléfono e IP; proveedor intercambiable (`otp/`), hoy solo `dev`
+(acepta 000000). Producción se niega a arrancar con `dev` salvo
+`ALLOW_INSECURE_AUTH=true` (demos). **Proveedor real escrito (2026-10-20): Twilio Verify por SMS** (`otp/twilio.ts`,
+verificado con `tsc` y con tests contra un `fetch` simulado, sin haber mandado
+todavía un SMS de verdad). Falta probarlo con la cuenta de prueba y el celular, y quitar
+`/users/*` cuando el front use `/me/*`. También se sumó vitest con tests de
+ingreso, idempotencia y perfil/lugares.
 
 Consola de pruebas local en `GET /dev` (`src/dev/console.ts`), con todos
 los endpoints en orden de uso; solo si `NODE_ENV !== "production"`.
@@ -178,6 +191,26 @@ editarlo la IA por una restricción del entorno).
   perfil público (regla de categoría, visibilidad), locales y `/places`.
 - **Escrito el 2026-10-17 y sin verificar**: `userName` en las fichas de
   cliente (ver CHANGELOG). Solo cambia consultas, sin migración.
+- **Verificado el 2026-10-20 (por el usuario, Node 22.23.3)**: `tsc --noEmit`
+  sin errores y `npm test`: **72 de 72 tests en verde** (5 archivos): los 42
+  de antes más el proveedor de Twilio con `fetch` simulado, las reglas de
+  arranque de la configuración y los fallos del proveedor en el ingreso.
+  **Los tests necesitan Node >= 22.12**: con Node 20, `app.inject()` falla al
+  cargar `cookie@2` (módulo ESM) y se rompen los 44 tests que lo usan.
+- **Verificado el 2026-10-18 (por el usuario, Node 22)**: `npm install`,
+  `npm run db:migrate` (aplicó `20261018120000_ingreso_real_sesiones_y_otp`
+  y la base está en sync), `tsc --noEmit` sin errores y **`npm test`: 42 de
+  42 tests en verde** (`tests/auth.test.ts`, `idempotency.test.ts` y
+  `places.test.ts`, contra la base `platita_test`). Eso verifica el ingreso
+  por código con el proveedor `dev` (límites, intentos, vencimiento,
+  sesión, `/me`), la idempotencia, los cobros simultáneos, el perfil
+  público, los locales y `/places`. **Sin verificar todavía**: el ingreso
+  con el frontend real, un proveedor real de códigos, y lo que los tests no
+  cubren (vista previa del bono, movimientos del comercio, búsqueda por
+  teléfono, inactivos, el relleno de la migración `usuarios_globales` sobre
+  datos reales y las rutas `/users` con `INSECURE_USER_ROUTES=false`).
+- `npm audit --omit=dev` da 0 vulnerabilidades; `npm audit` muestra 6 en
+  herramientas de desarrollo de vitest 2 (no llegan a producción).
 - **Verificado el 2026-10-16 (por el usuario)**: `npm run db:migrate` aplicó
   `20261016120000_usuarios_globales` (con su relleno de usuarios) y Prisma
   informa la base en sync, y `tsc --noEmit` no mostró errores. **Sigue sin
@@ -192,7 +225,9 @@ editarlo la IA por una restricción del entorno).
 - Autenticación de comercios (hoy cualquiera con un id puede operar; postergada a propósito).
 - WhatsApp (mensaje de saldo y campañas).
 - Frontend / panel del mostrador, QR.
-- Tests.
+- Proveedor real de códigos (Twilio).
+- Tests de los módulos de ledger, bonificaciones y clientes, y de aislamiento
+  entre comercios (hoy hay tests de ingreso, idempotencia y perfil/lugares).
 
 ## Decisiones abiertas
 

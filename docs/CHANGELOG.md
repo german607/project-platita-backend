@@ -405,3 +405,117 @@ puso al cliente y el que se puso la persona. Se agregó `userName` (el
 consulta (`include` de `user.name`), sin ir a `/users` por cliente, y sale
 plano: nunca el objeto `user`. Campo nuevo y aditivo, sin migración. Los
 demás campos y `name` no cambian. **Escrito sin poder compilar ni correr.**
+
+## 2026-10-17 (PR #7 mergeado)
+
+- Se mergeó en `dev` el PR #7 (`jeronimo/perfil-publico-y-cliente`): perfil
+  público, locales, `/places`, usuario global con rutas sin verificación y
+  `userName` en las fichas. Funcionó probado desde el frontend. GitHub borró
+  las ramas mergeadas del remoto. Recordatorio: en la imagen Docker
+  (`NODE_ENV=production`) las rutas `/users/*` no existen salvo
+  `INSECURE_USER_ROUTES=true`.
+
+## 2026-10-18 (ingreso real del cliente, PR A)
+
+El frontend dejó `docs/PLAN-INGRESO-REAL.md` (en su repo) con el plan del
+ingreso por código. Se implementó la parte que no necesita cuenta externa
+(proveedor `dev`); el proveedor real queda para otro PR. **Escrito sin poder
+compilar ni correr** (el entorno de la IA no ejecuta `tsc`, Prisma ni el
+servidor).
+
+Decisiones, tomadas con el usuario y distintas del plan donde se indica:
+
+- **Un solo token opaco** guardado con hash (sha256) en `Session`, 60 días
+  que se renuevan al usarlo; **sin JWT, sin `/auth/refresh` y sin
+  `JWT_SECRET`** (el plan tenía JWT + refresh con rotación). Se revoca al
+  instante con `POST /auth/logout`. Respuesta de `verify-code`: `{ token,
+  expiresAt, user }`. Un 401 `INVALID_SESSION` significa volver a pedir código.
+- **Proveedor intercambiable**: interfaz `OtpProvider` en
+  `src/modules/auth/otp/`, hoy solo `dev` (acepta 000000). `check` devuelve
+  `approved | incorrect | expired | too_many_attempts` (no un booleano) para
+  poder distinguir los errores. Los 5 minutos y los 5 intentos por código los
+  aplica el servicio (`OtpChallenge`), no el proveedor; los límites de pedidos
+  (1 cada 30 s y 5 por hora por teléfono, 20 por hora por IP) se cuentan en
+  `OtpRequest` con un candado por teléfono.
+- **Producción se niega a arrancar con el proveedor `dev`** salvo
+  `ALLOW_INSECURE_AUTH=true`, una bandera explícita para demos (el stage
+  `develop` también corre con `NODE_ENV=production`). El log avisa en grande.
+- Nuevas variables: `OTP_PROVIDER`, `OTP_CHANNEL`, `ALLOW_INSECURE_AUTH`,
+  `SESSION_TTL_DAYS`, `TRUST_PROXY` (detrás de un proxy, para que los límites
+  por IP funcionen).
+- Endpoints: `GET /auth/config` (extra: avisa el proveedor y el `devCode` para
+  que el front muestre la ayuda solo con `dev`), `POST /auth/request-code`
+  (204, igual para teléfonos conocidos y desconocidos), `POST
+  /auth/verify-code`, `POST /auth/logout`, `GET`/`PATCH /me` y `GET
+  /me/balances` (misma forma que `/users/:id/balances`, siempre del usuario de
+  la sesión). Códigos de error: `INVALID_PHONE` (400), `CODE_INCORRECT` y
+  `CODE_EXPIRED` (422), `TOO_MANY_ATTEMPTS` y `TOO_MANY_REQUESTS` (429, con
+  `details.retryAfterSeconds`), `OTP_PROVIDER_ERROR` (502), `INVALID_SESSION`
+  (401).
+- `User.phoneVerifiedAt` se marca con el primer código correcto. Si la
+  persona ya existía porque un comercio la anotó, es el mismo usuario.
+- Migración escrita a mano: `20261018120000_ingreso_real_sesiones_y_otp`
+  (tablas `Session`, `OtpRequest` y `OtpChallenge`, y la columna nueva).
+  Limpieza horaria de datos viejos en `server.ts`.
+- **Tests con vitest** (`npm test`, carpeta `tests/`): ingreso y sesión,
+  idempotencia y cobros simultáneos, y perfil público/locales/`/places`. Usan
+  una base aparte (`platita_test`) y se niegan a correr contra una que no
+  termine en `_test`; en el CI usan la base descartable del job. Hay que
+  correr `npm install` y **commitear el `package-lock.json`** (el CI usa
+  `npm ci`).
+- Se mantienen `/users/*` e `INSECURE_USER_ROUTES` hasta que el front pase a
+  `/me/*`; después se quitan (PR C). Twilio Verify queda para el PR B.
+
+## 2026-10-18 (verificación del PR A)
+
+- El usuario corrió, en Node 22: `npm install` (vitest y 43 paquetes),
+  `npm run db:migrate` (aplicó `20261018120000_ingreso_real_sesiones_y_otp`,
+  la base en sync), `npx tsc --noEmit` (sin errores) y `npm test`: **42 de 42
+  tests en verde a la primera** (3 archivos, base `platita_test`, 5,9 s). Con
+  eso quedan verificados por primera vez corriendo: ingreso por código y
+  sesión, idempotencia (incluidos pedidos simultáneos con la misma clave),
+  cobros simultáneos sin sobregiro, perfil público, locales y `/places`.
+- `npm audit --omit=dev` da 0; `npm audit` da 6 (2 críticas, 1 alta, 3
+  moderadas) en dependencias de desarrollo traídas por vitest 2; no se
+  corrige con `--force`, queda como pendiente P2 en `TODO.md`.
+
+## 2026-10-20 (proveedor Twilio Verify, PR B)
+
+La cuenta de prueba de Twilio ya existe (la creó el usuario; el Auth Token
+se pegó por error en el chat y se rotó enseguida, ya con otro valor).
+Se escribió el proveedor real **sin poder compilar ni correr** (el entorno de
+la IA no ejecuta `tsc` ni los tests):
+
+- `src/modules/auth/otp/twilio.ts`: `createTwilioProvider(cfg, deps)` con
+  `fetch` a `verify.twilio.com/v2/Services/{VA…}/Verifications` y
+  `/VerificationCheck`, autenticación básica, timeout de 10 s y un `fetch`
+  inyectable para los tests. Traduce los estados de Twilio al contrato de
+  `OtpProvider` (ver `BACKEND.md`). `TwilioError` no guarda el mensaje de
+  Twilio ni la causa de red (podrían traer el teléfono o la URL).
+- `config.ts`: `OTP_PROVIDER` acepta `twilio`; nuevas `TWILIO_ACCOUNT_SID`,
+  `TWILIO_AUTH_TOKEN`, `TWILIO_VERIFY_SID` y `TWILIO_LOCALE` (opcional).
+  Con `twilio` son obligatorias (las tres) y los prefijos deben ser `AC` y
+  `VA`; los mensajes de error nombran variables, no valores.
+- `otp/index.ts`: los proveedores se arman una sola vez, la primera que se usa.
+- `auth/service.ts`: si el proveedor falla al **comprobar** un código, 502
+  `OTP_PROVIDER_ERROR` y se devuelve el intento que se había contado (antes
+  habría sido un 500 genérico). El fallo al **mandar** ya existía.
+- Tests nuevos: `twilio-provider.test.ts` (contrato con `fetch` simulado, sin
+  salir a la red), `config.test.ts` (producción se niega a arrancar con `dev`
+  salvo opt-in, y las credenciales de Twilio) y 3 casos de fallos del
+  proveedor en `auth.test.ts`.
+- Dos cosas que hay que confirmar contra la documentación de Twilio porque se
+  escribieron de memoria: los códigos de error (404 sin verificación abierta,
+  429/60202 por intentos) y que `Locale=es` esté soportado.
+- Pendiente de verificar corriendo: `npm test`, y un SMS real al celular
+  verificado de la cuenta de prueba.
+
+## 2026-10-20 (verificación del proveedor Twilio)
+
+- El usuario corrió `tsc --noEmit` (sin errores) y `npm test`: **72 de 72 en
+  verde**. En una primera corrida con Node 20.12.2 fallaron 44 tests por
+  `require() of ES Module .../cookie/dist/index.js from light-my-request`:
+  `app.inject()` carga `cookie@2` (solo ESM), que necesita Node >= 22.12. No
+  era un error del código: con `nvm use` (22.23.3) pasaron todos. Queda como
+  mejora opcional subir `engines` a `>=22.12` (toca el lock).
+- Sigue sin verificar: un SMS real con la cuenta de prueba de Twilio.

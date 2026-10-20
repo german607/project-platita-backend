@@ -28,7 +28,7 @@ Corre en cada PR hacia `dev` o `main` y en cada push a esas ramas.
 | `prisma migrate deploy` | Que las migraciones se apliquen sobre un Postgres 16 limpio |
 | `prisma migrate diff` | Que `schema.prisma` no tenga cambios sin migración |
 | `npm run build` + `/health` | Que la API compile y levante |
-| `npm test --if-present` | Los tests, cuando existan |
+| `npm test --if-present` | Los tests (vitest, `tests/`). En el CI usan la base del job (`DATABASE_URL`, `CI=true`); en local, `platita_test` (ver `BACKEND.md`) |
 | Imagen Docker (solo PRs) | Que el `Dockerfile` arme, que las migraciones corran dentro del contenedor y que la imagen responda `/health` |
 
 ### 2. Revisión IA (`ai-review.yml`)
