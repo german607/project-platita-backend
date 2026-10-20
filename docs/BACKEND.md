@@ -10,7 +10,10 @@ PostgreSQL 16, Zod para validar. Entorno local con `docker-compose.yml`
 (Postgres) y `.env.example` (`DATABASE_URL`, `PORT`). Variables de
 entorno (todas validadas en `src/config.ts`): `DATABASE_URL`, `PORT`
 (default 3000), `NODE_ENV` y `INSECURE_USER_ROUTES` (`true`/`false`; por defecto activas fuera de
-producción y apagadas en producción: ver Usuarios) y `CORS_ORIGINS` (orígenes del frontend
+producción y apagadas en producción: ver Usuarios), las del ingreso real
+(`OTP_PROVIDER`, `OTP_CHANNEL`, `ALLOW_INSECURE_AUTH`, `SESSION_TTL_DAYS`,
+`TRUST_PROXY`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_VERIFY_SID`,
+`TWILIO_LOCALE`: ver Ingreso real) y `CORS_ORIGINS` (orígenes del frontend
 separados por coma, ej. `https://app.platita.uy,http://localhost:5173`;
 vacío = sin CORS; nunca `*`). Con CORS habilitado se aceptan los headers
 `Content-Type`, `Authorization` e `Idempotency-Key`, los métodos GET,
@@ -42,7 +45,9 @@ src/
     locations/         locales de un comercio (solo cambia la dirección)
     places/            vista PÚBLICA de comercios para el cliente (/places)
     users/             el usuario global (la persona) y sus saldos; SIN verificación
+    auth/              ingreso del cliente por código, sesiones y /me (otp/ = proveedores del código)
   dev/console.ts       consola de pruebas /dev (solo fuera de producción)
+tests/                 tests de integración (vitest) contra una base de pruebas
 ```
 
 Cada módulo tiene los mismos tres archivos:
@@ -187,6 +192,73 @@ User (la persona, por teléfono)
   lado del cliente: cuando exista el ingreso real se reemplazan por
   `/me/*` con la misma lógica (las funciones de `users/service.ts` reciben
   el id del usuario, no saben cómo se identificó).
+- **Ingreso real del cliente** (`/auth/*`, `/me/*`): la persona escribe su
+  celular, recibe un código de 6 dígitos y lo escribe; queda con una sesión
+  abierta por semanas. No hay usuario ni contraseña. Un teléfono queda
+  verificado (`User.phoneVerifiedAt`) con el primer código correcto, y si la
+  persona no existía se crea (o ya la había creado un comercio al anotarla:
+  es el mismo `User`, por teléfono).
+  - **Código**: vive 5 minutos, sirve una sola vez y se puede intentar 5
+    veces; pedir uno nuevo reinicia los intentos. Eso lo aplica el servicio,
+    no el proveedor. Errores: 422 `CODE_INCORRECT` (`details.attemptsLeft`),
+    422 `CODE_EXPIRED` (venció, nunca se pidió o ya se usó), 429
+    `TOO_MANY_ATTEMPTS`. Teléfono inválido: 400 `INVALID_PHONE`.
+  - **Límites de pedidos** (cada mensaje cuesta plata): 1 cada 30 s y 5 por
+    hora por teléfono, y 20 por hora por IP. Pasados: 429 `TOO_MANY_REQUESTS`
+    con `details.retryAfterSeconds`. Se cuentan en la base (`OtpRequest`) con
+    un candado por teléfono. Detrás de un proxy hay que poner
+    `TRUST_PROXY=true`, si no todas las IPs parecen la del proxy.
+  - **Sin enumeración**: `request-code` responde 204 igual para un teléfono
+    conocido y uno desconocido.
+  - **Sesión**: un solo token opaco (32 bytes aleatorios) que el cliente manda
+    como `Authorization: Bearer <token>`. En la base solo se guarda su hash
+    (sha256). Dura `SESSION_TTL_DAYS` (60) y se renueva al usarla (a lo sumo
+    una vez por hora). Se revoca al instante con `POST /auth/logout`. No hay
+    refresh token ni JWT. Cualquier problema con el token (falta, desconocido,
+    vencido, cerrado) es 401 `INVALID_SESSION`: el front vuelve a pedir código.
+  - **`/me/*`** lee siempre del usuario de la sesión, nunca de un id que mande
+    el cliente. `GET /me/balances` tiene la misma forma que
+    `GET /users/:id/balances`.
+  - **Proveedor del código** (`src/modules/auth/otp/`): la interfaz
+    `OtpProvider` (`start` y `check`) es lo único que conoce quién manda el
+    mensaje. Existen `dev` (no manda nada y solo acepta `000000`) y `twilio`
+    (Twilio Verify). **Producción se niega a arrancar con `dev`** salvo `ALLOW_INSECURE_AUTH=true`
+    (para demos, con un aviso en el log): lo valida `config.ts`. El canal
+    (`OTP_CHANNEL=sms|whatsapp`) también es configuración, no del front.
+    `GET /auth/config` avisa el proveedor y el `devCode`, para que el front
+    muestre la ayuda solo con `dev`.
+  - **Twilio Verify** (`otp/twilio.ts`): llama a la API REST con `fetch`, sin
+    SDK, con autenticación básica. Se activa con `OTP_PROVIDER=twilio` y estas
+    variables, que **solo van en el entorno, nunca en el código ni en el repo**:
+    `TWILIO_ACCOUNT_SID` (empieza con `AC`), `TWILIO_AUTH_TOKEN` y
+    `TWILIO_VERIFY_SID` (el SID del **servicio de Verify**, empieza con `VA`,
+    no el de la cuenta); opcional `TWILIO_LOCALE` (ej. `es`) para el idioma del
+    SMS. `config.ts` se niega a arrancar si falta alguna o si los prefijos no
+    coinciden, y sus mensajes nombran las variables pero nunca los valores.
+    Traducción de Twilio a `OtpProvider.check`: estado `approved` → `approved`;
+    `pending` → `incorrect`; `expired` o `canceled` → `expired`;
+    `max_attempts_reached` o HTTP 429 con código 60202 → `too_many_attempts`;
+    HTTP 404 (no hay verificación abierta) → `expired`; cualquier otra cosa
+    (credenciales inválidas, error 5xx, sin red, respuesta rara) es un fallo del
+    proveedor: 502 `OTP_PROVIDER_ERROR`, que no cuenta contra los límites de la
+    persona y no gasta un intento. Los errores de `TwilioError` guardan solo el
+    estado HTTP, el código de Twilio y el enlace a su documentación, **nunca su
+    mensaje** (puede traer el teléfono). Si todos los códigos aparecen como
+    vencidos, revisar `TWILIO_VERIFY_SID` (un SID equivocado también da 404).
+    En la cuenta de prueba de Twilio solo se manda a números verificados de
+    antemano en su consola, y cada verificación gasta de las gratis.
+    **El servicio de Verify tiene que estar configurado con códigos de 6
+    dígitos** (el backend valida exactamente 6) y el canal SMS activado.
+  - **Cambiar o sumar un proveedor**: (1) crear `otp/<nombre>.ts` que cumpla `OtpProvider`, devolviendo
+    `approved`, `incorrect`, `expired` o `too_many_attempts` en `check`;
+    (2) sumarlo al mapa de `otp/index.ts` y al enum `OTP_PROVIDER` de
+    `config.ts`; (3) poner `OTP_PROVIDER=<nombre>` y sus credenciales en
+    variables de entorno, nunca en el código. No se toca ninguna ruta.
+  - **Riesgo conocido**: si un teléfono se recicla, quien lo recibe vería los
+    saldos del dueño anterior. Es un tema de términos y condiciones.
+  - Las rutas `/users/*` (ingreso sin verificar) siguen existiendo por ahora
+    y se eliminan, junto con `INSECURE_USER_ROUTES`, cuando el front pase a
+    `/me/*`.
 - **Lugares** (`/places`): vista pública (sin sesión) de los comercios con
   `visible = true`. Solo expone el perfil público (nombre, categoría,
   descripción, foto, locales activos, horarios y promos activas); nunca
@@ -240,7 +312,14 @@ User (la persona, por teléfono)
   público: `description?`, `photoUrl?`, `category?`, `categoryChangedAt?`,
   `visible` (default `false`), `openingHours?` (JSON). Índice
   (`visible`, `category`).
-- `User` — `id`, `phone` (único), `name?`, `createdAt`.
+- `User` — `id`, `phone` (único), `name?`, `phoneVerifiedAt?` (nulo = existe
+  pero nunca verificó), `createdAt`.
+- `Session` — `userId`, `tokenHash` (único), `expiresAt`, `lastUsedAt`,
+  `revokedAt?`, `userAgent?`. Índices (`userId`) y (`expiresAt`).
+- `OtpRequest` — `phone`, `ip?`, `createdAt` (para los límites). Se borra a
+  las 24 h.
+- `OtpChallenge` — `phone` (único), `requestedAt`, `attempts` (el código
+  vigente de un teléfono). Se borra a las 24 h.
 - `Location` — `merchantId`, `label?`, `address`, `active`, `createdAt`.
   Índice (`merchantId`, `active`).
 - `BonusRule` — `merchantId`, `name?`, `description?`, `minTopUp`,
@@ -257,7 +336,7 @@ Los índices originales están en la migración
 `20261013150000_idempotencia_y_origen_de_bonos` y
 `20261015120000_perfil_publico_y_locales` y
 `20261016120000_usuarios_globales` (crea un usuario por cada teléfono
-existente y enlaza las fichas).
+existente y enlaza las fichas) y `20261018120000_ingreso_real_sesiones_y_otp`.
 
 ## Endpoints
 
@@ -268,6 +347,13 @@ existente y enlaza las fichas).
 | GET | `/merchants` | Lista comercios (paginado) |
 | GET | `/merchants/:id` | Un comercio |
 | PATCH | `/merchants/:id` | Edita un comercio y su perfil público (categoría, visibilidad, horarios…) |
+| GET | `/auth/config` | Proveedor de códigos en uso, canal y `devCode` (solo con `dev`) |
+| POST | `/auth/request-code` | `{ phone }` → 204. Manda el código; 429 si pide demasiados |
+| POST | `/auth/verify-code` | `{ phone, code }` → `{ token, expiresAt, user }`. Crea al usuario si no existía |
+| POST | `/auth/logout` | **Sesión.** 204; cierra la sesión actual |
+| GET | `/me` | **Sesión.** El usuario |
+| PATCH | `/me` | **Sesión.** La persona cambia su nombre |
+| GET | `/me/balances` | **Sesión.** Saldos en cada comercio (`{ data: [{ merchant, balance, lastVisitAt }] }`) |
 | POST | `/users` | **Sin verificar, solo si `INSECURE_USER_ROUTES`.** Se identifica con el teléfono: busca o crea el usuario |
 | GET | `/users/:id` | **Sin verificar.** El usuario |
 | PATCH | `/users/:id` | **Sin verificar.** El usuario cambia su nombre |
@@ -294,6 +380,24 @@ existente y enlaza las fichas).
 | GET | `/customers/:id/transactions?type=` | Libro mayor del cliente (paginado) |
 
 Ninguno tiene autenticación todavía (`/places` es público a propósito).
+
+## Tests
+
+`npm test` corre vitest (`tests/`) contra Postgres real con `app.inject()`:
+ingreso y sesión (`auth.test.ts`), el proveedor de Twilio con un `fetch`
+simulado (`twilio-provider.test.ts`), las reglas de arranque de la
+configuración (`config.test.ts`), idempotencia y cobros simultáneos
+(`idempotency.test.ts`) y perfil público, locales y `/places`
+(`places.test.ts`). Los tests **vacían las tablas**, por eso usan una base
+aparte: `platita_test` (o `TEST_DATABASE_URL`), y se niegan a correr contra
+una base cuyo nombre no termine en `_test` (en el CI, que es descartable, se
+usa la `DATABASE_URL` del job). Crear la base una sola vez:
+
+```
+docker compose exec db createdb -U platita platita_test
+```
+
+Las migraciones se aplican solas al empezar. Detalle en [`CI.md`](CI.md).
 
 ## Consola de pruebas (`/dev`)
 

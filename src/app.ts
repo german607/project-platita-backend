@@ -8,7 +8,9 @@ import { modules } from "./modules/index.js";
 // Arma la app sin levantar el puerto: así server.ts la escucha y los tests
 // (cuando existan) la usan directo con app.inject().
 export async function buildApp() {
-  const app = Fastify({ logger: config.NODE_ENV !== "test" });
+  // trustProxy: detrás de un proxy, req.ip sale del header X-Forwarded-For
+  // (si no, todos los pedidos parecen venir de la IP del proxy).
+  const app = Fastify({ logger: config.NODE_ENV !== "test", trustProxy: config.TRUST_PROXY });
 
   app.setErrorHandler(errorHandler);
   app.addHook("onClose", async () => {

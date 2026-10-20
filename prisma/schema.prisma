@@ -87,7 +87,51 @@ model User {
   phone     String     @unique
   name      String?    // nombre que elige la propia persona
   createdAt DateTime   @default(now())
+  // Se marca la primera vez que verifica el teléfono con el código (null =
+  // existe pero nunca se verificó, ej. lo creó un comercio al anotarlo).
+  phoneVerifiedAt DateTime?
   customers Customer[]
+  sessions  Session[]
+}
+
+// Sesión de un usuario: un token opaco de un solo valor que se manda como
+// `Authorization: Bearer`. Solo se guarda su hash (sha256). Se revoca al
+// instante poniendo `revokedAt`.
+model Session {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  tokenHash  String    @unique
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime  // se corre hacia adelante mientras se use (ver auth/service.ts)
+  lastUsedAt DateTime  @default(now())
+  revokedAt  DateTime?
+  userAgent  String?
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// Pedidos de código aceptados (para limitar cuántos se mandan por teléfono y
+// por IP: cada mensaje cuesta plata). Se borran a las 24 h.
+model OtpRequest {
+  id        String   @id @default(cuid())
+  phone     String
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([phone, createdAt])
+  @@index([ip, createdAt])
+}
+
+// El código vigente de un teléfono: cuándo se pidió y cuántos intentos van.
+// Un solo registro por teléfono; pedir un código nuevo lo reinicia. El código
+// en sí lo guarda y valida el proveedor, no nosotros.
+model OtpChallenge {
+  id          String   @id @default(cuid())
+  phone       String   @unique
+  requestedAt DateTime @default(now())
+  attempts    Int      @default(0)
 }
 
 // Regla de bonificación: "cargá X y recibís X + bonus"

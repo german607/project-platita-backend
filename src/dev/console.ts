@@ -54,6 +54,7 @@ const PAGE = /* html */ `<!doctype html>
       <div><label for="v-bonusRuleId">bonusRuleId</label><input id="v-bonusRuleId" placeholder="se completa al crear una regla"></div>
       <div><label for="v-customerId">customerId</label><input id="v-customerId" placeholder="se completa al crear un cliente"></div>
       <div><label for="v-locationId">locationId</label><input id="v-locationId" placeholder="se completa al crear un local"></div>
+      <div><label for="v-token">token (sesión del cliente)</label><input id="v-token" placeholder="se completa al verificar el código"></div>
       <div><label for="v-userId">userId</label><input id="v-userId" placeholder="se completa al identificar un usuario"></div>
     </div>
   </div>
@@ -66,6 +67,8 @@ const PAGE = /* html */ `<!doctype html>
 //   body     → cuerpo de ejemplo (JSON)
 //   query    → query string de ejemplo
 //   captures → nombre de la variable de arriba que se completa con data.id de la respuesta
+//                 (o con data[captureKey] si hay captureKey)
+//   auth     → manda Authorization: Bearer <variable token>
 //   section  → título de grupo (solo en el primero de cada grupo)
 var ENDPOINTS = [
   { section: "General", method: "GET", path: "/health", desc: "Chequeo de vida." },
@@ -103,6 +106,20 @@ var ENDPOINTS = [
     body: { name: "Juan Pérez" } },
   { method: "GET", path: "/users/:userId/balances",
     desc: "Saldos del usuario en cada comercio donde tiene ficha, también con saldo 0. Última visita primero. Es la forma que tendrá GET /me/balances. Montos en centésimos." },
+
+  { section: "Ingreso del cliente (código por mensaje) y sesión", method: "GET", path: "/auth/config",
+    desc: "Qué proveedor de códigos hay. Con el proveedor dev trae devCode: 000000 (único código válido, no manda nada)." },
+  { method: "POST", path: "/auth/request-code",
+    desc: "Pide un código para un teléfono. 204 siempre que sea válido y no pase los límites (1 cada 30 s y 5 por hora por teléfono, 20 por hora por IP): si no, 429 TOO_MANY_REQUESTS con details.retryAfterSeconds. Responde igual si el teléfono es conocido o no. Teléfono inválido: 400 INVALID_PHONE.",
+    body: { phone: "099123456" } },
+  { method: "POST", path: "/auth/verify-code", captures: "token", captureKey: "token",
+    desc: "Verifica el código y abre la sesión: { token, expiresAt, user }. Crea al usuario si no existía. El token se manda como Authorization: Bearer. Errores: 422 CODE_INCORRECT (details.attemptsLeft), 422 CODE_EXPIRED (vence a los 5 minutos o ya se usó), 429 TOO_MANY_ATTEMPTS (5 intentos por código).",
+    body: { phone: "099123456", code: "000000" } },
+  { method: "GET", path: "/me", auth: true, desc: "El usuario de la sesión. 401 INVALID_SESSION si el token falta, venció o se cerró." },
+  { method: "PATCH", path: "/me", auth: true, desc: "La persona cambia su nombre (null lo borra).", body: { name: "Juan Pérez" } },
+  { method: "GET", path: "/me/balances", auth: true,
+    desc: "Saldos de la persona en cada comercio donde tiene ficha, también con saldo 0. Misma forma que /users/:id/balances. Montos en centésimos." },
+  { method: "POST", path: "/auth/logout", auth: true, desc: "Cierra la sesión: el token deja de servir al instante. 204." },
 
   { section: "Lugares (público, lo ve el cliente)", method: "GET", path: "/places",
     desc: "Comercios visibles, por nombre. Filtros: category, search (por nombre), paginado. Cada uno con locales activos y hasActivePromo. Sin datos de clientes.",
@@ -151,7 +168,7 @@ var ENDPOINTS = [
     query: "from=2026-10-13T00:00:00-03:00&to=2026-10-14T00:00:00-03:00&limit=50" }
 ];
 
-var VARS = ["merchantId", "bonusRuleId", "customerId", "locationId", "userId"];
+var VARS = ["merchantId", "bonusRuleId", "customerId", "locationId", "userId", "token"];
 var list = document.getElementById("list");
 
 function getVar(name) { return document.getElementById("v-" + name).value.trim(); }
@@ -207,6 +224,7 @@ ENDPOINTS.forEach(function (ep) {
 
   btn.addEventListener("click", async function () {
     var missing = pathVars(ep.path).filter(function (name) { return !getVar(name); });
+    if (ep.auth && !getVar("token")) missing.push("token (primero verificá un código)");
     if (missing.length) {
       status.className = "status bad";
       status.textContent = "Falta completar arriba: " + missing.join(", ");
@@ -217,6 +235,7 @@ ENDPOINTS.forEach(function (ep) {
     if (queryBox && queryBox.value.trim()) url += "?" + queryBox.value.trim();
     var opts = { method: ep.method, headers: {} };
     if (keyBox && keyBox.value.trim()) opts.headers["idempotency-key"] = keyBox.value.trim();
+    if (ep.auth) opts.headers["authorization"] = "Bearer " + getVar("token");
     if (bodyBox) {
       opts.headers["content-type"] = "application/json";
       opts.body = bodyBox.value;
@@ -233,8 +252,9 @@ ENDPOINTS.forEach(function (ep) {
         + (res.headers.get("idempotent-replayed") ? " — REINTENTO: devolvió la respuesta guardada, no registró de nuevo" : "");
       out.textContent = data !== null ? JSON.stringify(data, null, 2) : text;
       out.style.display = "block";
-      if (res.ok && ep.captures && data && typeof data === "object" && data.id) {
-        setVar(ep.captures, data.id);
+      var captured = data && typeof data === "object" ? data[ep.captureKey || "id"] : null;
+      if (res.ok && ep.captures && captured) {
+        setVar(ep.captures, captured);
       }
     } catch (err) {
       status.className = "status bad";
