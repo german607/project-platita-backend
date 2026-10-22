@@ -13,7 +13,11 @@ export default defineConfig({
       DATABASE_URL: TEST_DATABASE_URL,
       // El proveedor de códigos de los tests es siempre el de prueba.
       OTP_PROVIDER: "dev",
+      // Los tests no usan el modo mixto aunque el .env de quien los corre lo tenga.
+      OTP_REAL_PHONES: "",
       INSECURE_USER_ROUTES: "true",
+      // Para probar que el preflight de CORS no pide sesión.
+      CORS_ORIGINS: "http://localhost:5173",
     },
   },
 });

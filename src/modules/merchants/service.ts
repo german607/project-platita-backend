@@ -18,12 +18,14 @@ function toResponse(merchant: Merchant) {
   return { ...merchant, openingHours: normalizeOpeningHours(merchant.openingHours) };
 }
 
-export async function createMerchant(input: CreateMerchantInput) {
-  return toResponse(await db.merchant.create({ data: input }));
+export async function createMerchant(input: CreateMerchantInput, ownerId: string) {
+  return toResponse(await db.merchant.create({ data: { ...input, ownerId } }));
 }
 
-export async function listMerchants(page: PageQuery) {
+// Solo los comercios de esa persona, del más nuevo al más viejo.
+export async function listMerchants(ownerId: string, page: PageQuery) {
   const rows = await db.merchant.findMany({
+    where: { ownerId },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     ...pageArgs(page),
   });

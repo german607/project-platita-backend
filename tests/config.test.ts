@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const MANAGED = [
   "OTP_PROVIDER",
+  "OTP_REAL_PHONES",
   "ALLOW_INSECURE_AUTH",
   "TWILIO_ACCOUNT_SID",
   "TWILIO_AUTH_TOKEN",
@@ -23,6 +24,8 @@ async function loadConfig(env: Record<string, string> = {}) {
   Object.assign(process.env, { NODE_ENV: "test" }, env);
   return import("../src/config.js");
 }
+
+const CREDS = { TWILIO_ACCOUNT_SID: "ACxxxxxxxx", TWILIO_AUTH_TOKEN: "secreto", TWILIO_VERIFY_SID: "VAxxxxxxxx" };
 
 const TWILIO = {
   OTP_PROVIDER: "twilio",
@@ -89,6 +92,50 @@ describe("validación de la configuración al arrancar", () => {
       const { config } = await loadConfig({ ...TWILIO, TWILIO_LOCALE: "es" });
       expect(config.OTP_PROVIDER).toBe("twilio");
       expect(config.TWILIO_LOCALE).toBe("es");
+    });
+  });
+
+  describe("OTP_REAL_PHONES (modo mixto: 000000 para todos menos para esos teléfonos)", () => {
+    it("con el proveedor dev y las credenciales de Twilio arranca, con los teléfonos normalizados", async () => {
+      const { otpRealPhones, otpProviderName } = await loadConfig({ OTP_REAL_PHONES: "092 965 852, 099111222", ...CREDS });
+      expect(otpProviderName).toBe("dev");
+      expect(otpRealPhones).toEqual(["+59892965852", "+59899111222"]);
+    });
+
+    it("el mismo teléfono escrito de dos formas cuenta una vez", async () => {
+      const { otpRealPhones } = await loadConfig({ OTP_REAL_PHONES: "092965852,+59892965852", ...CREDS });
+      expect(otpRealPhones).toEqual(["+59892965852"]);
+    });
+
+    it("sin la lista no hay modo mixto", async () => {
+      const { otpRealPhones } = await loadConfig();
+      expect(otpRealPhones).toEqual([]);
+    });
+
+    it("exige las credenciales de Twilio", async () => {
+      await expect(loadConfig({ OTP_REAL_PHONES: "092965852" })).rejects.toThrow(/TWILIO_ACCOUNT_SID/);
+    });
+
+    it("rechaza un elemento que no es un teléfono, diciendo cuál pero sin mostrarlo", async () => {
+      const error = await loadConfig({ OTP_REAL_PHONES: "092965852, no-es-un-telefono", ...CREDS }).catch((e) => e);
+      expect(error).toBeInstanceOf(Error);
+      expect(error.message).toContain("el elemento 2");
+      expect(error.message).not.toContain("no-es-un-telefono");
+    });
+
+    it("no se combina con OTP_PROVIDER=twilio (ya son todos reales)", async () => {
+      await expect(loadConfig({ ...TWILIO, OTP_REAL_PHONES: "092965852" })).rejects.toThrow(/solo se usa con OTP_PROVIDER=dev/);
+    });
+
+    it("en producción sigue pidiendo ALLOW_INSECURE_AUTH, porque el resto entra con 000000", async () => {
+      await expect(loadConfig({ NODE_ENV: "production", OTP_REAL_PHONES: "092965852", ...CREDS })).rejects.toThrow(/ALLOW_INSECURE_AUTH/);
+      const { usingInsecureAuth } = await loadConfig({
+        NODE_ENV: "production",
+        OTP_REAL_PHONES: "092965852",
+        ALLOW_INSECURE_AUTH: "true",
+        ...CREDS,
+      });
+      expect(usingInsecureAuth).toBe(true);
     });
   });
 });

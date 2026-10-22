@@ -26,9 +26,10 @@ export async function clearOtpLimits() {
 type Json = Record<string, any>;
 
 // Atajos para llamar a la API sin levantar el puerto.
-export function api(app: FastifyInstance) {
+// `defaultHeaders` (por ejemplo la sesión de una persona) se manda en todos los pedidos.
+export function api(app: FastifyInstance, defaultHeaders: Record<string, string> = {}) {
   const call = async (method: "GET" | "POST" | "PATCH", url: string, body?: unknown, headers: Record<string, string> = {}) => {
-    const res = await app.inject({ method, url, payload: body as any, headers });
+    const res = await app.inject({ method, url, payload: body as any, headers: { ...defaultHeaders, ...headers } });
     const text = res.body;
     return { status: res.statusCode, headers: res.headers, body: (text ? JSON.parse(text) : null) as Json, raw: text };
   };
@@ -50,16 +51,22 @@ export async function loginAs(app: FastifyInstance, phone: string) {
   return { token: verified.body.token as string, user: verified.body.user as Json, authHeader: { authorization: `Bearer ${verified.body.token}` } };
 }
 
-// Un comercio nuevo; devuelve su id.
-export async function seedMerchant(app: FastifyInstance, name = "Café de la Esquina") {
-  const res = await api(app).post("/merchants", { name });
+// Un comercio nuevo; devuelve su id. Hace falta la sesión de quien lo crea (queda como dueña).
+export async function seedMerchant(app: FastifyInstance, name = "Café de la Esquina", headers: Record<string, string> = {}) {
+  const res = await api(app).post("/merchants", { name }, headers);
   if (res.status !== 201) throw new Error(`crear comercio falló: ${res.raw}`);
   return res.body.id as string;
 }
 
-// La ficha de una persona en un comercio (busca o crea).
-export async function seedCustomer(app: FastifyInstance, merchantId: string, phone: string, name?: string) {
-  const res = await api(app).post(`/merchants/${merchantId}/customers`, { phone, name });
+// La ficha de una persona en un comercio (busca o crea). Hace falta la sesión de la dueña del comercio.
+export async function seedCustomer(
+  app: FastifyInstance,
+  merchantId: string,
+  phone: string,
+  name?: string,
+  headers: Record<string, string> = {},
+) {
+  const res = await api(app).post(`/merchants/${merchantId}/customers`, { phone, name }, headers);
   if (res.status !== 200) throw new Error(`crear cliente falló: ${res.raw}`);
   return res.body;
 }

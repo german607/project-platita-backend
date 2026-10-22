@@ -28,6 +28,18 @@ export async function getUser(id: string) {
   return user;
 }
 
+// Para `GET /me`: la persona y los comercios de los que es dueña (id y nombre,
+// del más viejo al más nuevo).
+export async function getMe(id: string) {
+  const user = await getUser(id);
+  const merchants = await db.merchant.findMany({
+    where: { ownerId: id },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: { id: true, name: true },
+  });
+  return { user, merchants };
+}
+
 export async function updateUser(id: string, input: UpdateUserInput) {
   await getUser(id);
   return db.user.update({ where: { id }, data: input });

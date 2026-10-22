@@ -39,11 +39,13 @@ Este es el **único backlog** del proyecto (ver `docs/AGENTS.md`). El estado gen
 
 ## 2. Autenticación y comercios (Backend)
 
-- [ ] **P0** Registro y login de comercio (email + contraseña, hash con bcrypt)
-- [ ] **P0** JWT y middleware de autenticación
-- [ ] **P0** Acotar **todas** las rutas al comercio autenticado (hoy cualquiera puede operar sobre cualquier `merchantId`)
-- Decisión 2026-10-13: la autenticación **se posterga** y no se toca por ahora (el frontend usa un `merchantId` fijo por configuración). Cuando se haga: mantener las URLs actuales y solo verificar que `:merchantId` sea el del token, con un flag `AUTH_REQUIRED` para migrar sin cortar al frontend.
-- [ ] **P1** Usuarios por comercio (dueño / cajero) con permisos distintos
+- [x] **P0** Registro y login de comercio: se resuelve con el mismo ingreso por código por mensaje que los clientes (no email y contraseña): una persona crea un comercio estando con sesión y queda como dueña (2026-10-22; sin verificar corriendo)
+- [x] **P0** Middleware de autenticación: `requireSession` y token opaco (sin JWT; ver §12)
+- [x] **P0** Acotar **todas** las rutas al comercio autenticado: `/merchants`, `/customers`, `/bonus-rules` y `/locations` exigen sesión y ser la dueña (`auth/access.ts`; 401/403/404); verificado por `tests/merchant-access.test.ts` (99 tests en verde, 2026-10-22); falta probarlo con el frontend
+- Decisión 2026-10-13: la autenticación del comercio se había postergado. **El 2026-10-22 el frontend la pidió** (para sacar `VITE_MERCHANT_ID`) y se hizo con las URLs actuales y sin flag de transición: el área del comercio del front deja de andar hasta que mande el token.
+- [ ] **P1** Usuarios por comercio (dueño / cajero) con permisos distintos: hoy hay un solo dueño por comercio (`Merchant.ownerId`); para cajeros hará falta una tabla de miembros con rol
+- [ ] **P1** Traspaso de un comercio a otra persona sin pasar por el script, y un tope de comercios por persona (hoy cualquiera con sesión puede crear los que quiera)
+- [ ] **P1** Asignar dueño a los comercios anteriores a los dueños (`npm run db:assign-merchant -- --list` los muestra) en cada base donde existan, incluida la de producción cuando haya
 - [~] **P1** ABM básico de comercios: alta, listado, detalle y edición (sin autenticación todavía)
 - [~] **P1** Perfil del comercio: nombre, teléfono, plan y perfil público (descripción, foto por URL, categoría, horarios, visibilidad); ver §12. Falta la subida del logo/foto
 - [ ] **P2** Recuperación de contraseña
@@ -128,7 +130,7 @@ Este es el **único backlog** del proyecto (ver `docs/AGENTS.md`). El estado gen
 
 ## 10. Seguridad y datos personales (Backend + PO)
 
-- [ ] **P0** Rate limiting en login y rutas públicas
+- [~] **P0** Rate limiting en login y rutas públicas (el login por código ya tiene límites por teléfono e IP; faltan las rutas públicas como `/places`)
 - [~] **P1** CORS con `@fastify/cors` y orígenes permitidos por `CORS_ORIGINS` (nunca `*`); falta `npm install` y probarlo con el frontend
 - [ ] **P1** Headers de seguridad antes de exponer la API
 - [ ] **P0** Nunca loguear contraseñas ni tokens
@@ -160,7 +162,10 @@ Hito iniciado el 2026-10-15. La web tiene dos áreas con la misma API: comercio 
 - [~] **P0** Usuario global (`User`, por teléfono) enlazado desde cada `Customer.userId`, con `POST /users`, `GET`/`PATCH /users/:id` y `GET /users/:id/balances` **sin verificación** y solo fuera de producción (2026-10-16; migración y `tsc` verificados, lógica sin correr)
 - [x] **P0** `GET /me/balances` (misma lógica que `/users/:id/balances`, con la sesión real): saldos del usuario verificado, juntando las filas `Customer` con su teléfono (verificado por los tests)
 - [x] **P1** Rate limiting del ingreso (`/auth/request-code`: por teléfono e IP, en la base). Verificado por los tests. Falta el de `/places` y los endpoints públicos (`/places`, `/auth/client/*`), por IP y por teléfono
-- [~] **P0** Proveedor real de códigos: `otp/twilio.ts` (Twilio Verify por SMS, con `fetch`, sin SDK), escrito el 2026-10-20 y verificado con `tsc` y tests contra un `fetch` simulado (72 tests en verde); falta mandar un SMS real a un número verificado de la cuenta de prueba. Credenciales solo en variables de entorno
+- [x] **P0** Proveedor real de códigos: `otp/twilio.ts` (Twilio Verify por SMS, con `fetch`, sin SDK): verificado con tests contra un `fetch` simulado (72 en verde) y **probado de punta a punta por el usuario con el frontend y su celular** (cuenta de prueba de Twilio); queda pendiente el canal WhatsApp. Credenciales solo en variables de entorno
+- [~] **P1** Modo mixto de verificación (`OTP_REAL_PHONES`): 000000 para todos menos para los teléfonos de la lista, que van por Twilio; probado por el usuario con el frontend y por `tests/routing-provider.test.ts` y `config.test.ts` (99 tests en verde)
+- [ ] **P1** Probar el canal WhatsApp de Twilio Verify (`OTP_CHANNEL=whatsapp`, sin cambios de código): activarlo en el servicio de Verify (en la cuenta de prueba, con la plantilla de prueba de Twilio y solo a números verificados; en producción hace falta un remitente de WhatsApp Business propio) y confirmar el precio a Uruguay, ver `docs/BACKEND.md`
+- [ ] **P2** Variante inversa para producción: Twilio para todos y 000000 solo para una lista de teléfonos de prueba (revisores de tiendas de apps, pruebas de punta a punta); no implementada
 - [ ] **P1** Confirmar en la web oficial de Twilio el precio por verificación a Uruguay, el crédito de prueba y si Uruguay exige registrar el nombre del remitente de los SMS; revisar que el servicio de Verify tenga códigos de 6 dígitos
 - [ ] **P2** Credencial de Twilio con API Key (`SK…`) en vez del Auth Token de la cuenta, para poder revocarla sin tocar la cuenta
 - [ ] **P0** Quitar `/users/*` y `INSECURE_USER_ROUTES` cuando el front use `/me/*`
@@ -171,3 +176,4 @@ Hito iniciado el 2026-10-15. La web tiene dos áreas con la misma API: comercio 
 - [ ] **P2** Endpoint de administración para cambiar la categoría antes de los 90 días (hoy se corrige a mano en la base)
 - [ ] **P1** Verificar corriendo lo que los tests no cubren de 2026-10-15/16: el relleno de usuarios de la migración `usuarios_globales` sobre una base con datos reales y las rutas `/users` con `INSECURE_USER_ROUTES=false` (perfil, locales y `/places` ya verificados por `tests/`)
 - [ ] **P2** Revisar las 6 vulnerabilidades de `npm audit` en dependencias de desarrollo (vitest 2: vite y esbuild; producción está limpia, `npm audit --omit=dev` da 0): probar una versión más nueva de vitest. No usar `npm audit fix --force`
+- [ ] **P0** Verificar con el frontend lo del 2026-10-22 (migración, `tsc` y tests ya verificados): que mande el token, la pantalla de a qué cuenta entrar según `GET /me`, y que el preflight de CORS del navegador real no pida sesión (hay un test, falta el navegador)
