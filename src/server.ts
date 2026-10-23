@@ -1,5 +1,5 @@
 import { buildApp } from "./app.js";
-import { config, usingInsecureAuth } from "./config.js";
+import { allowedMerchantPhones, config, isProduction, usingInsecureAuth } from "./config.js";
 import { db } from "./lib/db.js";
 import { deleteExpiredIdempotencyKeys } from "./lib/idempotency.js";
 import { deleteExpiredAuthData } from "./modules/auth/cleanup.js";
@@ -22,6 +22,12 @@ const cleanup = setInterval(() => {
   deleteExpiredAuthData(db).catch((err) => app.log.warn(err, "no se pudieron limpiar datos de ingreso"));
 }, 60 * 60 * 1000);
 cleanup.unref();
+
+if (isProduction && allowedMerchantPhones.length === 0) {
+  app.log.warn(
+    "ATENCIÓN: ALLOWED_MERCHANT_PHONES está vacía: en producción nadie puede crear comercios hasta que se configure.",
+  );
+}
 
 if (usingInsecureAuth) {
   app.log.warn(

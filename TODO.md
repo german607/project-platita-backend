@@ -30,7 +30,8 @@ Este es el **único backlog** del proyecto (ver `docs/AGENTS.md`). El estado gen
 - [~] **P0** Configuración por variables de entorno validada con zod al arrancar (`src/config.ts`; compila, falta ver que arranque)
 - [~] **P0** Manejo de errores uniforme (formato `{ error, code, details }`) (`src/lib/error-handler.ts`; compila, falta recorrer los casos)
 - [ ] **P1** Logs estructurados con request id
-- [ ] **P1** Seed de datos de ejemplo para desarrollo
+- [~] **P1** Seed de datos de ejemplo para desarrollo: `npm run db:seed` (idempotente) y `npm run db:reset-seed` (vacía todo y recarga), solo en local; escrito el 2026-10-22 y verificado por `tests/seed.test.ts` (108 tests en verde); falta correr `npm run db:seed` y `db:reset-seed` a mano sobre la base de desarrollo y probar con el front
+- [ ] **P1** Reemplazar `.env.example` por la versión de `docs/env.example.txt` (`OTP_PROVIDER=dev` por defecto, Twilio comentado y la nota de `OTP_REAL_PHONES`): la sesión de la IA no puede editar ese archivo; copiarlo a mano con `cp docs/env.example.txt .env.example` y borrar el `.txt`
 - [x] Arquitectura modular por área (`src/modules/<área>` con schemas, service y routes) y `buildApp()` testeable; ver `docs/BACKEND.md`
 - [~] Consola de pruebas local en `/dev`, solo fuera de producción (`src/dev/console.ts`)
 - [ ] **P1** Ponerle nombres descriptivos a las migraciones nuevas (las dos primeras quedaron como `primeramigracion_jero` y `segunda_parte`)
@@ -44,7 +45,9 @@ Este es el **único backlog** del proyecto (ver `docs/AGENTS.md`). El estado gen
 - [x] **P0** Acotar **todas** las rutas al comercio autenticado: `/merchants`, `/customers`, `/bonus-rules` y `/locations` exigen sesión y ser la dueña (`auth/access.ts`; 401/403/404); verificado por `tests/merchant-access.test.ts` (99 tests en verde, 2026-10-22); falta probarlo con el frontend
 - Decisión 2026-10-13: la autenticación del comercio se había postergado. **El 2026-10-22 el frontend la pidió** (para sacar `VITE_MERCHANT_ID`) y se hizo con las URLs actuales y sin flag de transición: el área del comercio del front deja de andar hasta que mande el token.
 - [ ] **P1** Usuarios por comercio (dueño / cajero) con permisos distintos: hoy hay un solo dueño por comercio (`Merchant.ownerId`); para cajeros hará falta una tabla de miembros con rol
-- [ ] **P1** Traspaso de un comercio a otra persona sin pasar por el script, y un tope de comercios por persona (hoy cualquiera con sesión puede crear los que quiera)
+- [~] **P0** Solo los teléfonos habilitados pueden crear comercios: `ALLOWED_MERCHANT_PHONES` (lista en una variable de entorno; sin lista, abierto fuera de producción y cerrado en producción); 403 `MERCHANT_CREATION_NOT_ALLOWED` y `canCreateMerchant` en `GET /me` (2026-10-23; verificado por `tests/merchant-creation.test.ts`, 118 tests en verde; falta probarlo con el front)
+- [ ] **P1** Traspaso de un comercio a otra persona sin pasar por el script, y un tope de comercios por persona (quien está habilitada puede crear los que quiera)
+- [ ] **P1** Configurar `ALLOWED_MERCHANT_PHONES` en cada entorno donde haya comercios reales, y agregar la variable al `.env.example` (la sesión de la IA no puede editar ese archivo; ver `docs/BACKEND.md`)
 - [ ] **P1** Asignar dueño a los comercios anteriores a los dueños (`npm run db:assign-merchant -- --list` los muestra) en cada base donde existan, incluida la de producción cuando haya
 - [~] **P1** ABM básico de comercios: alta, listado, detalle y edición (sin autenticación todavía)
 - [~] **P1** Perfil del comercio: nombre, teléfono, plan y perfil público (descripción, foto por URL, categoría, horarios, visibilidad); ver §12. Falta la subida del logo/foto

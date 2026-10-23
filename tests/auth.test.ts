@@ -198,7 +198,8 @@ describe("ingreso del cliente por código", () => {
 
   describe("sesión y /me", () => {
     it("sin token, con token falso o mal formado: 401 INVALID_SESSION", async () => {
-      for (const headers of [{}, { authorization: "Bearer nada" }, { authorization: "Basic abc" }]) {
+      const cases: Record<string, string>[] = [{}, { authorization: "Bearer nada" }, { authorization: "Basic abc" }];
+      for (const headers of cases) {
         const res = await http.get("/me", headers);
         expect(res.status).toBe(401);
         expect(res.body.code).toBe("INVALID_SESSION");

@@ -119,17 +119,35 @@ Antes de empezar: preguntar a 10 comercios qué usan hoy para fidelizar. Sirve c
 
 ### Correr en local
 
+**Node 22 o más nuevo** (el repo trae un `.nvmrc`: con `nvm use` se elige solo; con Node 20 los tests fallan).
+
 ```bash
+nvm use
 cp .env.example .env
 docker compose up -d
 npm install
 npm run db:migrate
+npm run db:seed     # datos de ejemplo para probar (opcional)
 npm run dev
 ```
 
 Con el servidor arriba, `http://localhost:3000/dev` abre una consola de
 pruebas para probar todos los endpoints desde el navegador (solo fuera de
 producción). Si el puerto 3000 está ocupado: `PORT=3001 npm run dev`.
+
+**Datos de ejemplo.** `npm run db:seed` carga personas con teléfonos fijos,
+comercios visibles con locales, horarios y promos, y clientes con saldos y
+movimientos (incluye casos para probar: saldo 0, clientes que no vienen hace
+más de 30 días y una persona con saldo en varios comercios). Se puede repetir
+sin duplicar. Imprime qué teléfono entra a qué cuenta; en local todos entran con
+el código `000000`. `npm run db:reset-seed` **borra toda la base de desarrollo**
+y vuelve a cargar los datos de ejemplo. Ambos se niegan a correr en producción
+o contra una base que no sea local.
+
+**Ingreso de prueba y SMS reales.** Con `OTP_PROVIDER=dev` (el valor por defecto
+en `.env.example`) cualquier teléfono entra con `000000`. Para probar un SMS real
+con tu número sin perder eso, ver `OTP_REAL_PHONES` en `.env.example` y la sección
+"Ingreso real" de [`docs/BACKEND.md`](docs/BACKEND.md).
 
 ### Endpoints y documentación técnica
 

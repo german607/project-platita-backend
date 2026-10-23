@@ -147,6 +147,13 @@ dueño: se asignan con `npm run db:assign-merchant`. Esto adelanta el "Auth
 para comercios" que se había postergado (`TODO.md` §2), pero con el ingreso por
 código en lugar de email y contraseña.
 
+**Quién puede crear comercios (2026-10-23, pedido del usuario; verificado por los
+tests, falta probarlo con el front):** `ALLOWED_MERCHANT_PHONES` (lista de teléfonos en una variable de
+entorno). Solo esos teléfonos pueden hacer `POST /merchants` (si no, 403
+`MERCHANT_CREATION_NOT_ALLOWED`); sin lista, abierto en desarrollo y tests y
+**cerrado en producción**. `GET /me` suma `canCreateMerchant`. No afecta a quien
+ya es dueña de un comercio.
+
 **Modo mixto (2026-10-21, probado por el usuario con el frontend y por los tests):** `OTP_REAL_PHONES` lista
 teléfonos que se verifican de verdad con Twilio mientras el resto entra con
 000000 (para probar con tu número sin perder la comodidad del código de
@@ -155,6 +162,15 @@ verificado con `tsc` y con tests contra un `fetch` simulado, sin haber mandado
 todavía un SMS de verdad). Falta probarlo con la cuenta de prueba y el celular, y quitar
 `/users/*` cuando el front use `/me/*`. También se sumó vitest con tests de
 ingreso, idempotencia y perfil/lugares.
+
+**Seed de desarrollo (2026-10-22, verificado por los tests; falta correrlo a mano):** `npm run db:seed` carga
+personas con teléfonos fijos (`+59899000001` dueña de dos comercios,
+`+59899000002` solo cliente, `+59899000003` dueña de tres), cinco comercios
+visibles y clientes con saldos y movimientos en fechas distintas, y se puede
+repetir sin duplicar; `npm run db:reset-seed` vacía toda la base de desarrollo y
+recarga. Ambos solo corren en local. Todos entran con `000000`. El `.env.example`
+nuevo quedó en `docs/env.example.txt` para copiar a mano (la sesión de la IA no
+puede editar `.env.example`).
 
 Consola de pruebas local en `GET /dev` (`src/dev/console.ts`), con todos
 los endpoints en orden de uso; solo si `NODE_ENV !== "production"`.

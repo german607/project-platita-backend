@@ -4,6 +4,7 @@ import { notFound, unprocessable } from "../../lib/errors.js";
 import { normalizeOpeningHours } from "../../lib/opening-hours.js";
 import { pageArgs, toPage } from "../../lib/pagination.js";
 import type { PageQuery } from "../../lib/schemas.js";
+import { assertCanCreateMerchant } from "./policy.js";
 import type { CreateMerchantInput, UpdateMerchantInput } from "./schemas.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -19,6 +20,9 @@ function toResponse(merchant: Merchant) {
 }
 
 export async function createMerchant(input: CreateMerchantInput, ownerId: string) {
+  // Solo los teléfonos habilitados pueden crear comercios (ver policy.ts).
+  const owner = await db.user.findUniqueOrThrow({ where: { id: ownerId }, select: { phone: true } });
+  assertCanCreateMerchant(owner.phone);
   return toResponse(await db.merchant.create({ data: { ...input, ownerId } }));
 }
 

@@ -621,3 +621,74 @@ de la IA no ejecuta `tsc`, Prisma ni los tests).
   tema distinto y mayor. Se renombró (todavía sin subir) a
   `jeronimo/duenos-de-comercio-y-modo-mixto` y se decidió un solo PR con los dos
   temas, porque comparten archivos (`auth/routes.ts`, tests y docs).
+
+## 2026-10-22 (seed de desarrollo)
+
+Pedido del frontend para probar todo en local sin armar datos a mano. En la misma
+rama `jeronimo/duenos-de-comercio-y-modo-mixto` (antes de subirla). **Escrito sin
+poder correr.**
+
+- `npm run db:seed` (`scripts/seed.ts` + `scripts/lib/seed.ts`): tres personas con
+  teléfonos fijos (Ana `+59899000001`, dueña de dos comercios; Beto
+  `+59899000002`, solo cliente; Carla `+59899000003`, dueña de tres y clienta de
+  uno), cinco comercios visibles (cafetería, barbería, panadería, lavadero y
+  pilates/yoga) con descripción, foto placeholder, locales (la barbería tiene
+  dos), horarios variados (validados con el esquema de la API) y promos con
+  nombre y descripción, y clientes con saldos y movimientos en fechas distintas:
+  saldo 0 (con y sin visita reciente), inactivos de más de 30 días (uno con mucho
+  saldo, para "Reactivar"), una persona con saldo en varios comercios y nombres
+  distintos entre el comercio y la persona. Los bonos se calculan con las promos
+  del comercio. Es idempotente: reemplaza solo lo que cuelga de los comercios
+  `seed_*`. Imprime qué teléfono entra a qué cuenta.
+- `npm run db:reset-seed`: vacía toda la base de desarrollo y vuelve a cargar.
+  Ambos se niegan a correr en producción o en una base no local
+  (`scripts/lib/dev-guard.ts`).
+- `tests/seed.test.ts`: el seed carga lo esperado, no duplica al repetirlo, no
+  deja saldos negativos, trae los casos para probar y cada teléfono entra a la
+  cuenta que se dice (con `loginAs` y `/me`).
+- README: con qué Node correr (22), el paso de `db:seed` y cómo probar un SMS real.
+- `.env.example`: no se pudo editar desde la sesión de la IA (los permisos del
+  entorno lo bloquean). La versión nueva (con `OTP_PROVIDER=dev` por defecto, las
+  variables de Twilio comentadas y una nota sobre `OTP_REAL_PHONES`) quedó en
+  `docs/env.example.txt` para copiarla a mano.
+- No se hizo el punto 4 del pedido (mergear a `dev` junto con el front): lo
+  decide el usuario cuando termine de probar.
+
+- El usuario corrió `tsc --noEmit` (sin errores) y `npm test`: **108 de 108 tests en
+  verde**, incluido `tests/seed.test.ts`. Queda por correr `npm run db:seed` y
+  `db:reset-seed` sobre la base de desarrollo y probar con el front. Ojo: el
+  `tsc --noEmit` de la raíz solo cubre `src/`; `scripts/` y `tests/` se chequean con
+  `npx tsc --noEmit -p tests`.
+
+## 2026-10-23 (quién puede crear comercios)
+
+Pedido del usuario: "para la creación de locales no cualquiera puede, tiene que
+ser números permitidos, en una lista en una variable de entorno". Se interpretó
+"locales" como **comercios** (`POST /merchants`, la cuenta de comercio) y no como
+las direcciones de un comercio; si se quiso decir otra cosa, hay que adaptarlo.
+Se hizo en la rama `jeronimo/duenos-de-comercio-y-modo-mixto` (todavía sin subir)
+porque es parte del mismo tema (quién es dueña de un comercio). **Escrito sin poder
+correr.**
+
+- `ALLOWED_MERCHANT_PHONES` en `config.ts`: lista separada por comas, cualquier
+  formato uruguayo, normalizada y sin repetidos; un elemento inválido hace fallar
+  el arranque (dice cuál, no su valor). `config.ts` pasó a tener un helper común
+  para las listas (`splitList` y `normalizedPhones`), que usan también
+  `OTP_REAL_PHONES`.
+- `merchants/policy.ts`: `canCreateMerchant(phone)`. Con lista, solo los de la
+  lista; **sin lista, abierto fuera de producción y cerrado en producción** (decisión
+  propia: un olvido de configuración no debe abrir el alta a cualquiera). El
+  servicio `createMerchant` lo exige (403 `MERCHANT_CREATION_NOT_ALLOWED`).
+- `GET /me` suma `canCreateMerchant` (aditivo) para que el front muestre u oculte
+  "crear cuenta de comercio" sin probar y recibir 403.
+- `server.ts` avisa en el log si en producción la lista está vacía.
+- No afecta a quien ya es dueña de un comercio, ni a `db:assign-merchant` ni al seed.
+- Tests: `merchant-creation.test.ts` (con lista, sin lista, en producción, `/me`) y 3
+  casos en `config.test.ts`. Los tests fuerzan la variable vacía para no depender del
+  `.env` de quien los corre.
+- `.env.example` no se pudo editar desde la sesión de la IA: hay que agregarle a mano
+  `ALLOWED_MERCHANT_PHONES`.
+
+- El usuario corrió `tsc --noEmit`, `tsc --noEmit -p tests` (limpios) y `npm test`: **118 de
+  118 tests en verde** (9 archivos), incluidos `merchant-creation.test.ts` y los casos nuevos
+  de `config.test.ts`. Falta probarlo con el front (`canCreateMerchant` en `GET /me`).

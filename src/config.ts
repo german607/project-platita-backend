@@ -9,6 +9,13 @@ try {
   // Sin .env: se usan las variables del entorno tal cual.
 }
 
+// "a, b ,c" -> ["a", "b", "c"] (sin elementos vacíos).
+const splitList = (value: string) =>
+  value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(3000),
@@ -48,15 +55,12 @@ const schema = z.object({
   // con 000000), los teléfonos de esta lista (separados por coma, en cualquier
   // formato uruguayo) pasan SIEMPRE por Twilio, así que 000000 no les sirve.
   // Pide las credenciales de Twilio. Sin lista, todo funciona como antes.
-  OTP_REAL_PHONES: z
-    .string()
-    .default("")
-    .transform((value) =>
-      value
-        .split(",")
-        .map((phone) => phone.trim())
-        .filter(Boolean),
-    ),
+  OTP_REAL_PHONES: z.string().default("").transform(splitList),
+  // Quién puede CREAR comercios: los teléfonos de esta lista (separados por
+  // coma, en cualquier formato uruguayo). Con lista, solo ellos; sin lista, en
+  // desarrollo y tests puede cualquiera (para probar) y en producción NADIE
+  // (se cierra, no se abre por olvido). Un comercio ya creado no depende de esto.
+  ALLOWED_MERCHANT_PHONES: z.string().default("").transform(splitList),
   // Canal por el que se manda el código. Se elige acá, no en el front.
   OTP_CHANNEL: z.enum(["sms", "whatsapp"]).default("sms"),
   // Permite el proveedor "dev" en producción (SOLO para demos): sin esto, el
@@ -83,6 +87,18 @@ const schema = z.object({
         "En producción hace falta un OTP_PROVIDER real. Para una demo con el proveedor de prueba (acepta 000000) hay que pedirlo a propósito con ALLOW_INSECURE_AUTH=true",
     });
   }
+
+  // Cada elemento de una lista de teléfonos tiene que ser un teléfono uruguayo
+  // válido; el mensaje dice cuál es el elemento, nunca su valor.
+  env.ALLOWED_MERCHANT_PHONES.forEach((phone, index) => {
+    if (!normalizeUyPhone(phone)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["ALLOWED_MERCHANT_PHONES"],
+        message: `ALLOWED_MERCHANT_PHONES: el elemento ${index + 1} no es un teléfono uruguayo válido`,
+      });
+    }
+  });
 
   // La lista de teléfonos reales solo tiene sentido sobre el proveedor dev, y
   // cada elemento tiene que ser un teléfono uruguayo válido (el mensaje dice
@@ -135,8 +151,12 @@ export const isProduction = config.NODE_ENV === "production";
 export const otpProviderName = config.OTP_PROVIDER ?? "dev";
 // Proveedor de prueba en producción (solo demos, con ALLOW_INSECURE_AUTH).
 export const usingInsecureAuth = isProduction && otpProviderName === "dev";
-// Teléfonos con verificación real en modo mixto, ya normalizados (+598…).
-export const otpRealPhones = [
-  ...new Set(config.OTP_REAL_PHONES.map((phone) => normalizeUyPhone(phone)).filter((phone): phone is string => !!phone)),
+// Una lista de teléfonos de la configuración, ya normalizados (+598…) y sin repetidos.
+const normalizedPhones = (list: string[]) => [
+  ...new Set(list.map((phone) => normalizeUyPhone(phone)).filter((phone): phone is string => !!phone)),
 ];
+// Teléfonos con verificación real en modo mixto.
+export const otpRealPhones = normalizedPhones(config.OTP_REAL_PHONES);
+// Teléfonos que pueden crear comercios (vacía = ver ALLOWED_MERCHANT_PHONES).
+export const allowedMerchantPhones = normalizedPhones(config.ALLOWED_MERCHANT_PHONES);
 export const insecureUserRoutes = config.INSECURE_USER_ROUTES ?? !isProduction;

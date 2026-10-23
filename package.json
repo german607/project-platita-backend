@@ -14,6 +14,8 @@
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:studio": "prisma studio",
+    "db:seed": "tsx scripts/seed.ts",
+    "db:reset-seed": "tsx scripts/reset-seed.ts",
     "db:delete-user": "tsx scripts/delete-user.ts",
     "db:assign-merchant": "tsx scripts/assign-merchant.ts",
     "test": "vitest run",

@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const MANAGED = [
   "OTP_PROVIDER",
   "OTP_REAL_PHONES",
+  "ALLOWED_MERCHANT_PHONES",
   "ALLOW_INSECURE_AUTH",
   "TWILIO_ACCOUNT_SID",
   "TWILIO_AUTH_TOKEN",
@@ -136,6 +137,25 @@ describe("validación de la configuración al arrancar", () => {
         ...CREDS,
       });
       expect(usingInsecureAuth).toBe(true);
+    });
+  });
+
+  describe("ALLOWED_MERCHANT_PHONES (quién puede crear comercios)", () => {
+    it("normaliza los teléfonos y no repite", async () => {
+      const { allowedMerchantPhones } = await loadConfig({ ALLOWED_MERCHANT_PHONES: "098 000 111, +59898000111, 099555777" });
+      expect(allowedMerchantPhones).toEqual(["+59898000111", "+59899555777"]);
+    });
+
+    it("sin lista queda vacía y arranca igual (no pide credenciales de nada)", async () => {
+      const { allowedMerchantPhones } = await loadConfig();
+      expect(allowedMerchantPhones).toEqual([]);
+    });
+
+    it("rechaza un elemento que no es un teléfono, diciendo cuál pero sin mostrarlo", async () => {
+      const error = await loadConfig({ ALLOWED_MERCHANT_PHONES: "098000111, esto-no-es-un-telefono" }).catch((e) => e);
+      expect(error).toBeInstanceOf(Error);
+      expect(error.message).toContain("ALLOWED_MERCHANT_PHONES: el elemento 2");
+      expect(error.message).not.toContain("esto-no-es-un-telefono");
     });
   });
 });

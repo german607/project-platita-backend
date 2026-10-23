@@ -398,6 +398,11 @@ ingresado**: queda como dueña.
 
 > ▶ **`POST /merchants`** (con su token): `{ "name": "Peluquería Don Pablo" }`
 > → `201 { "id": "m_pablo", "ownerId": "u_pablo", ... }`.
+> Pero no cualquiera puede: los comercios los habilitamos nosotros. Si el
+> teléfono de la persona no está en la lista de habilitados
+> (`ALLOWED_MERCHANT_PHONES`), responde `403 MERCHANT_CREATION_NOT_ALLOWED`. Por eso
+> `GET /me` trae `canCreateMerchant`: la app solo ofrece "crear cuenta de comercio"
+> cuando es `true`.
 > ▶ **`GET /merchants`**: lista **solo sus** comercios.
 
 Y ahora hay límites. Si Ana (otra persona, con su propia sesión) intenta tocar
