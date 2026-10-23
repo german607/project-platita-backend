@@ -12,6 +12,12 @@ leer el código. Los endpoints y reglas completos están en
 > **La API recibe pesos y devuelve centésimos**: $1.000 aparece como
 > `100000` en las respuestas.
 >
+> **Desde 2026-10-22 todo lo del comercio lleva sesión.** Las llamadas de las
+> escenas 1 a 8 (`/merchants`, `/customers`, `/bonus-rules`, `/locations`) se
+> hacen con `Authorization: Bearer <token>` de la persona que es **dueña** del
+> comercio (ver la escena 12); los ejemplos las muestran sin el header para
+> no repetirlo. Sin sesión dan `401`, y con un comercio ajeno, `403`.
+>
 > **Mantenimiento:** si cambia un endpoint o una regla del dominio que
 > aparece acá, se actualiza este documento en el mismo cambio (ver
 > [`AGENTS.md`](AGENTS.md)). El mismo recorrido se puede hacer a mano en
@@ -367,6 +373,50 @@ usuario de la escena 3: no se crea otro. Desde acá, la app manda
 > ▶ **`POST /auth/logout`**: cierra la sesión (204); el token deja de servir
 > al instante.
 
+## Escena 12: Pablo entra a su comercio
+
+Hasta ahora todo lo del comercio se hacía "a ciegas": cualquiera que conociera
+el id podía operarlo. Ahora el comercio **es de una persona**, y entra con el
+mismo código por mensaje que los clientes.
+
+> ▶ **Ingreso:** `POST /auth/request-code` y `POST /auth/verify-code` con el
+> celular de Pablo → `{ token, expiresAt, user }`.
+
+Pablo puede ser, a la vez, cliente de otros comercios y dueño de uno o más. La
+app le pregunta qué es:
+
+> ▶ **`GET /me`** (con su token):
+> ```json
+> { "user": { "id": "u_pablo", "phone": "+59894111223", "name": null, ... },
+>   "merchants": [ { "id": "m_pablo", "name": "Peluquería Don Pablo" } ] }
+> ```
+> Si `merchants` viene vacío es solo cliente; con un comercio, entra directo;
+> con varios, la app le pregunta a cuál.
+
+Cuando se da de alta un comercio nuevo, la persona **ya tiene que haber
+ingresado**: queda como dueña.
+
+> ▶ **`POST /merchants`** (con su token): `{ "name": "Peluquería Don Pablo" }`
+> → `201 { "id": "m_pablo", "ownerId": "u_pablo", ... }`.
+> Pero no cualquiera puede: los comercios los habilitamos nosotros. Si el
+> teléfono de la persona no está en la lista de habilitados
+> (`ALLOWED_MERCHANT_PHONES`), responde `403 MERCHANT_CREATION_NOT_ALLOWED`. Por eso
+> `GET /me` trae `canCreateMerchant`: la app solo ofrece "crear cuenta de comercio"
+> cuando es `true`.
+> ▶ **`GET /merchants`**: lista **solo sus** comercios.
+
+Y ahora hay límites. Si Ana (otra persona, con su propia sesión) intenta tocar
+el comercio de Pablo:
+
+> ▶ **`GET /customers/c_juancito`** (con el token de Ana) → `403`
+> `{ "error": "Este comercio no es tuyo", "code": "FORBIDDEN" }`. Lo mismo para
+> sus clientes, promos, locales y movimientos.
+> Sin ningún token: `401 INVALID_SESSION`. Con un id que no existe: `404`.
+
+Los comercios que se crearon antes de los dueños quedaron sin dueño (nadie los
+puede operar) hasta que se les asigna uno con `npm run db:assign-merchant`.
+Lo público no cambió: `/places` se sigue viendo sin sesión.
+
 ---
 
 ## Resumen: qué endpoint se usó en cada escena
@@ -408,6 +458,8 @@ usuario de la escena 3: no se crea otro. Desde acá, la app manda
 | 33 | `GET /me`, `PATCH /me` | Ver y cambiar su perfil | 11 |
 | 34 | `GET /me/balances` | Sus saldos con sesión real | 11 |
 | 35 | `POST /auth/logout` | Cerrar la sesión | 11 |
+| 36 | `GET /me` (con comercios) | Saber qué cuentas tiene la sesión | 12 |
+| 37 | `POST /merchants` (con sesión) | Crear un comercio y quedar como dueña | 12 |
 
 ## Lo que el cuento deja ver que falta
 

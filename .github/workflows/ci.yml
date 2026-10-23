@@ -151,12 +151,24 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # La imagen corre con NODE_ENV=production, y en producción el backend se
+      # niega a arrancar sin un proveedor de códigos real (config.ts). Así que la
+      # prueba la levanta con la configuración que usaría en producción: Twilio con
+      # credenciales de MENTIRA (con el formato que se valida: AC… y VA…). No se
+      # llama a Twilio al arrancar, así que alcanza para comprobar que la imagen
+      # levanta con su configuración real.
       - name: Migraciones y /health dentro del contenedor
         env:
           DATABASE_URL: postgresql://platita:platita@localhost:5432/platita
+          OTP_PROVIDER: twilio
+          TWILIO_ACCOUNT_SID: ACcismoketest00000000000000000000
+          TWILIO_AUTH_TOKEN: ci-no-es-un-secreto
+          TWILIO_VERIFY_SID: VAcismoketest00000000000000000000
         run: |
           docker run --rm --network host -e DATABASE_URL platita-backend:ci npx prisma migrate deploy
-          docker run -d --name api --network host -e DATABASE_URL platita-backend:ci
+          docker run -d --name api --network host \
+            -e DATABASE_URL -e OTP_PROVIDER -e TWILIO_ACCOUNT_SID -e TWILIO_AUTH_TOKEN -e TWILIO_VERIFY_SID \
+            platita-backend:ci
           for i in $(seq 1 30); do
             if curl -sf http://localhost:3000/health; then
               echo

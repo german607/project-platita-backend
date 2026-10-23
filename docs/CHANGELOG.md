@@ -519,3 +519,196 @@ la IA no ejecuta `tsc` ni los tests):
   era un error del código: con `nvm use` (22.23.3) pasaron todos. Queda como
   mejora opcional subir `engines` a `>=22.12` (toca el lock).
 - Sigue sin verificar: un SMS real con la cuenta de prueba de Twilio.
+
+## 2026-10-21 (modo mixto de verificación)
+
+El PR #8 (ingreso real con Twilio) se mergeó en `dev`. Rama nueva
+`jeronimo/otp-numeros-reales` desde `origin/dev`. Pedido del usuario: seguir en
+modo de prueba (cualquiera entra con 000000) pero que su propio número se
+verifique de verdad con Twilio. **Escrito sin poder compilar ni correr.**
+
+- Se descartó la idea literal ("000000 para todos, también para mi número"):
+  entonces cualquiera podría entrar como el dueño del número y la verificación
+  real no protegería nada. Se implementó al revés: 000000 vale para todos
+  **menos** para una lista de teléfonos que pasan siempre por Twilio.
+- `OTP_REAL_PHONES` (lista separada por comas, cualquier formato uruguayo,
+  normalizada y sin repetidos). Con `OTP_PROVIDER=dev` arma
+  `createRoutingProvider` (`otp/routing.ts`), que manda cada teléfono al
+  proveedor de prueba o al real, tanto en `start` como en `check`. El servicio
+  de auth no cambió.
+- `config.ts` valida: pide las tres credenciales de Twilio, no se combina con
+  `OTP_PROVIDER=twilio` y rechaza elementos que no son teléfonos uruguayos
+  (nombra el elemento, nunca su valor). En producción sigue exigiendo
+  `ALLOW_INSECURE_AUTH`.
+- `GET /auth/config` suma `realPhonesConfigured` (booleano; no dice cuáles).
+- Tests nuevos: `routing-provider.test.ts` (reparto entre proveedores y
+  selección según la configuración, con `fetch` simulado) y 7 casos de
+  `OTP_REAL_PHONES` en `config.test.ts`. Los tests fuerzan `OTP_REAL_PHONES`
+  vacío para no depender del `.env` de quien los corre.
+- Para el front: con el modo mixto el aviso del código 000000 sigue valiendo
+  salvo para los teléfonos de la lista; no hay forma de saber cuáles desde la
+  API a propósito.
+
+- Se agregó `npm run db:delete-user -- <teléfono>` (`scripts/delete-user.ts`):
+  borra a una persona y todo lo que cuelga de ella para repetir las pruebas
+  de ingreso. Se niega a correr en producción o contra una base no local.
+  Escrito sin correr. El teléfono se normaliza como en el resto de la API.
+
+## 2026-10-21 (continuación: SMS real probado)
+
+- El usuario probó de punta a punta, con el frontend ya adaptado a `/auth/*`, el
+  ingreso real con Twilio Verify por SMS y el modo mixto: **funciona**. Antes de
+  adaptar el front, el "código 000000" y la falta de SMS se debían a que el
+  front usaba todavía el ingreso simulado (`POST /users`): lo mostró el script
+  de borrado (0 sesiones y 0 pedidos de código para ese usuario).
+- Queda por probar el canal WhatsApp de Twilio Verify. No requiere cambios de
+  código: `OTP_CHANNEL=whatsapp` ya se pasa a Twilio como `Channel`. En la
+  cuenta de prueba, según la documentación de Twilio, usa su plantilla de prueba
+  y solo manda a números verificados; para producción hace falta un remitente de
+  WhatsApp Business propio (la función de Verify con WhatsApp figura como beta
+  pública). El precio a Uruguay no se pudo confirmar.
+
+## 2026-10-22 (dueños de comercio y permisos)
+
+Pedido del frontend para las cuentas de comercio: que la entrada decida sola a
+qué área llevar a la persona y se pueda sacar `VITE_MERCHANT_ID`. Se hizo sobre
+la rama `jeronimo/otp-numeros-reales` (que seguía con el modo mixto y el script
+de borrado sin commitear). **Escrito sin poder compilar ni correr** (el entorno
+de la IA no ejecuta `tsc`, Prisma ni los tests).
+
+- **Dueño**: `Merchant.ownerId` (nulo, FK a `User` con `ON DELETE SET NULL`),
+  migración `20261022120000_duenos_de_comercio` escrita a mano. Un solo dueño
+  por comercio; una persona puede tener varios.
+- **Permisos** (`src/modules/auth/access.ts`): un hook de la "zona del comercio"
+  (`modules/index.ts`) cubre `/merchants`, `/customers`, `/bonus-rules` y
+  `/locations`: `requireSession` (401 `INVALID_SESSION`) y
+  `authorizeMerchantAccess` (403 `FORBIDDEN` si el comercio es de otra persona;
+  404 si el comercio, cliente, regla o local no existe). Falla **cerrado**: una
+  ruta protegida sin regla da 500. Un comercio sin dueño da 403 a todos. Los
+  servicios no cambian: los permisos viven solo en el hook. `decorateRequest`
+  de `auth` se movió a `modules/index.ts` para que lo vean las dos zonas.
+- `POST /merchants` exige sesión y deja a la persona como dueña; `GET
+  /merchants` lista solo los comercios de la sesión (antes listaba todos).
+- **`GET /me` cambió de forma** (rompe al front actual, a pedido): ahora es `{
+  user, merchants: [{ id, name }] }` en vez del usuario suelto. `PATCH /me` sigue
+  devolviendo el usuario.
+- `scripts/assign-merchant.ts` (`npm run db:assign-merchant`): asigna dueño a un
+  comercio por teléfono y lista los que no tienen (`--list`). Solo corre contra
+  una base local salvo `--force-remote`.
+- Consola `/dev`: la sección de ingreso pasó al principio y todo lo del comercio
+  lleva el token. Tests: los existentes ahora operan con la sesión de la dueña
+  y hay `merchant-access.test.ts` (401, 403 en todas las rutas del comercio
+  ajeno, 404, comercios sin dueño, reasignación, `/places` público, preflight
+  de CORS y la falla cerrada).
+- Decisiones propias (no pedidas): 404 para lo que no existe y 403 solo para lo
+  que existe y es ajeno; sin flag de transición (el área del comercio del front
+  deja de andar hasta que mande el token); `GET /merchants` ya no lista todos.
+
+## 2026-10-22 (verificación de los dueños de comercio)
+
+- El usuario corrió `npm run db:migrate` (aplicó `20261022120000_duenos_de_comercio`,
+  base en sync), `tsc --noEmit` (sin errores) y `npm test` con Node 22.23.3: **99 de
+  99 tests en verde** (7 archivos). Una primera corrida con Node 20 había fallado
+  59 tests por el mismo motivo de siempre (`cookie@2`, necesita Node >= 22.12), no
+  por el código. Quedan verificados por primera vez: los permisos del comercio
+  (401/403/404, falla cerrado, comercios sin dueño y reasignación), el modo mixto
+  y el preflight de CORS sin sesión.
+- Pendiente: probarlo con el frontend (que mande el token y use `GET /me`) y el
+  preflight en el navegador real.
+
+- La rama de trabajo se llamaba `jeronimo/otp-numeros-reales` (nombre del modo
+  mixto, con el que empezó) pero pasó a incluir también los dueños de comercio, un
+  tema distinto y mayor. Se renombró (todavía sin subir) a
+  `jeronimo/duenos-de-comercio-y-modo-mixto` y se decidió un solo PR con los dos
+  temas, porque comparten archivos (`auth/routes.ts`, tests y docs).
+
+## 2026-10-22 (seed de desarrollo)
+
+Pedido del frontend para probar todo en local sin armar datos a mano. En la misma
+rama `jeronimo/duenos-de-comercio-y-modo-mixto` (antes de subirla). **Escrito sin
+poder correr.**
+
+- `npm run db:seed` (`scripts/seed.ts` + `scripts/lib/seed.ts`): tres personas con
+  teléfonos fijos (Ana `+59899000001`, dueña de dos comercios; Beto
+  `+59899000002`, solo cliente; Carla `+59899000003`, dueña de tres y clienta de
+  uno), cinco comercios visibles (cafetería, barbería, panadería, lavadero y
+  pilates/yoga) con descripción, foto placeholder, locales (la barbería tiene
+  dos), horarios variados (validados con el esquema de la API) y promos con
+  nombre y descripción, y clientes con saldos y movimientos en fechas distintas:
+  saldo 0 (con y sin visita reciente), inactivos de más de 30 días (uno con mucho
+  saldo, para "Reactivar"), una persona con saldo en varios comercios y nombres
+  distintos entre el comercio y la persona. Los bonos se calculan con las promos
+  del comercio. Es idempotente: reemplaza solo lo que cuelga de los comercios
+  `seed_*`. Imprime qué teléfono entra a qué cuenta.
+- `npm run db:reset-seed`: vacía toda la base de desarrollo y vuelve a cargar.
+  Ambos se niegan a correr en producción o en una base no local
+  (`scripts/lib/dev-guard.ts`).
+- `tests/seed.test.ts`: el seed carga lo esperado, no duplica al repetirlo, no
+  deja saldos negativos, trae los casos para probar y cada teléfono entra a la
+  cuenta que se dice (con `loginAs` y `/me`).
+- README: con qué Node correr (22), el paso de `db:seed` y cómo probar un SMS real.
+- `.env.example`: no se pudo editar desde la sesión de la IA (los permisos del
+  entorno lo bloquean). La versión nueva (con `OTP_PROVIDER=dev` por defecto, las
+  variables de Twilio comentadas y una nota sobre `OTP_REAL_PHONES`) quedó en
+  `docs/env.example.txt` para copiarla a mano.
+- No se hizo el punto 4 del pedido (mergear a `dev` junto con el front): lo
+  decide el usuario cuando termine de probar.
+
+- El usuario corrió `tsc --noEmit` (sin errores) y `npm test`: **108 de 108 tests en
+  verde**, incluido `tests/seed.test.ts`. Queda por correr `npm run db:seed` y
+  `db:reset-seed` sobre la base de desarrollo y probar con el front. Ojo: el
+  `tsc --noEmit` de la raíz solo cubre `src/`; `scripts/` y `tests/` se chequean con
+  `npx tsc --noEmit -p tests`.
+
+## 2026-10-23 (quién puede crear comercios)
+
+Pedido del usuario: "para la creación de locales no cualquiera puede, tiene que
+ser números permitidos, en una lista en una variable de entorno". Se interpretó
+"locales" como **comercios** (`POST /merchants`, la cuenta de comercio) y no como
+las direcciones de un comercio; si se quiso decir otra cosa, hay que adaptarlo.
+Se hizo en la rama `jeronimo/duenos-de-comercio-y-modo-mixto` (todavía sin subir)
+porque es parte del mismo tema (quién es dueña de un comercio). **Escrito sin poder
+correr.**
+
+- `ALLOWED_MERCHANT_PHONES` en `config.ts`: lista separada por comas, cualquier
+  formato uruguayo, normalizada y sin repetidos; un elemento inválido hace fallar
+  el arranque (dice cuál, no su valor). `config.ts` pasó a tener un helper común
+  para las listas (`splitList` y `normalizedPhones`), que usan también
+  `OTP_REAL_PHONES`.
+- `merchants/policy.ts`: `canCreateMerchant(phone)`. Con lista, solo los de la
+  lista; **sin lista, abierto fuera de producción y cerrado en producción** (decisión
+  propia: un olvido de configuración no debe abrir el alta a cualquiera). El
+  servicio `createMerchant` lo exige (403 `MERCHANT_CREATION_NOT_ALLOWED`).
+- `GET /me` suma `canCreateMerchant` (aditivo) para que el front muestre u oculte
+  "crear cuenta de comercio" sin probar y recibir 403.
+- `server.ts` avisa en el log si en producción la lista está vacía.
+- No afecta a quien ya es dueña de un comercio, ni a `db:assign-merchant` ni al seed.
+- Tests: `merchant-creation.test.ts` (con lista, sin lista, en producción, `/me`) y 3
+  casos en `config.test.ts`. Los tests fuerzan la variable vacía para no depender del
+  `.env` de quien los corre.
+- `.env.example` no se pudo editar desde la sesión de la IA: hay que agregarle a mano
+  `ALLOWED_MERCHANT_PHONES`.
+
+- El usuario corrió `tsc --noEmit`, `tsc --noEmit -p tests` (limpios) y `npm test`: **118 de
+  118 tests en verde** (9 archivos), incluidos `merchant-creation.test.ts` y los casos nuevos
+  de `config.test.ts`. Falta probarlo con el front (`canCreateMerchant` en `GET /me`).
+
+## 2026-10-23 (arreglo del CI: la imagen Docker)
+
+El job **Imagen Docker** del PR falló: el contenedor no respondió `/health`. Causa:
+la imagen corre con `NODE_ENV=production` (Dockerfile) y, desde que se agregó el
+ingreso real, `config.ts` **se niega a arrancar en producción con el proveedor de
+códigos de prueba** salvo `ALLOW_INSECURE_AUTH=true`. El CI levantaba el contenedor
+solo con `DATABASE_URL`, así que la guarda lo frenó (funcionó como estaba pensado: no
+fue un error del código). Arreglo, sin tocar la guarda:
+
+- `ci.yml`: el contenedor se levanta con la configuración de producción real,
+  `OTP_PROVIDER=twilio` y credenciales **de mentira** con el formato que se valida
+  (`AC…`, `VA…`). Al arrancar no se llama a Twilio, así que alcanza para comprobar que
+  la imagen levanta. Se eligió esto y no `ALLOW_INSECURE_AUTH=true` para no probar un
+  camino que no es el de producción.
+- `Dockerfile` y `docs/CI.md`: documentan que la imagen necesita un proveedor real
+  (o `ALLOW_INSECURE_AUTH` para demos), que sin `ALLOWED_MERCHANT_PHONES` nadie crea
+  comercios y que `/users/*` no existe sin `INSECURE_USER_ROUTES=true`.
+- Importante para el despliegue: cualquier lugar donde se corra la imagen (incluido
+  el stage `develop`) necesita esas variables, o no arranca.

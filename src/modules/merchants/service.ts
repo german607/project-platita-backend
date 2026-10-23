@@ -4,6 +4,7 @@ import { notFound, unprocessable } from "../../lib/errors.js";
 import { normalizeOpeningHours } from "../../lib/opening-hours.js";
 import { pageArgs, toPage } from "../../lib/pagination.js";
 import type { PageQuery } from "../../lib/schemas.js";
+import { assertCanCreateMerchant } from "./policy.js";
 import type { CreateMerchantInput, UpdateMerchantInput } from "./schemas.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -18,12 +19,17 @@ function toResponse(merchant: Merchant) {
   return { ...merchant, openingHours: normalizeOpeningHours(merchant.openingHours) };
 }
 
-export async function createMerchant(input: CreateMerchantInput) {
-  return toResponse(await db.merchant.create({ data: input }));
+export async function createMerchant(input: CreateMerchantInput, ownerId: string) {
+  // Solo los teléfonos habilitados pueden crear comercios (ver policy.ts).
+  const owner = await db.user.findUniqueOrThrow({ where: { id: ownerId }, select: { phone: true } });
+  assertCanCreateMerchant(owner.phone);
+  return toResponse(await db.merchant.create({ data: { ...input, ownerId } }));
 }
 
-export async function listMerchants(page: PageQuery) {
+// Solo los comercios de esa persona, del más nuevo al más viejo.
+export async function listMerchants(ownerId: string, page: PageQuery) {
   const rows = await db.merchant.findMany({
+    where: { ownerId },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     ...pageArgs(page),
   });

@@ -1,6 +1,7 @@
 import { db, getBalances } from "../../lib/db.js";
 import { notFound } from "../../lib/errors.js";
 import type { IdentifyUserInput, UpdateUserInput } from "./schemas.js";
+import { canCreateMerchant } from "../merchants/policy.js";
 
 // Usuario global: la persona, identificada por su teléfono normalizado. Cada
 // comercio tiene una ficha `Customer` por usuario, con el saldo de ESE
@@ -26,6 +27,19 @@ export async function getUser(id: string) {
   const user = await db.user.findUnique({ where: { id } });
   if (!user) throw notFound("Usuario");
   return user;
+}
+
+// Para `GET /me`: la persona, los comercios de los que es dueña (id y nombre,
+// del más viejo al más nuevo) y si puede crear comercios nuevos (para que el
+// front muestre u oculte "crear cuenta de comercio" en vez de probar y recibir 403).
+export async function getMe(id: string) {
+  const user = await getUser(id);
+  const merchants = await db.merchant.findMany({
+    where: { ownerId: id },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: { id: true, name: true },
+  });
+  return { user, merchants, canCreateMerchant: canCreateMerchant(user.phone) };
 }
 
 export async function updateUser(id: string, input: UpdateUserInput) {

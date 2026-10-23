@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { api, createTestApp, resetDb, seedMerchant } from "./helpers.js";
+import { api, createTestApp, loginAs, resetDb, seedMerchant } from "./helpers.js";
 
 const WEEK = {
   mon: [{ from: "09:00", to: "13:00" }, { from: "16:00", to: "20:00" }],
@@ -15,14 +15,16 @@ describe("perfil público, locales y lugares", () => {
 
   beforeAll(async () => {
     app = await createTestApp();
-    http = api(app);
   });
   afterAll(async () => {
     await app.close();
   });
   beforeEach(async () => {
     await resetDb();
-    merchantId = await seedMerchant(app, "Café de la Esquina");
+    // El comercio lo opera su dueña, con su sesión; /places es público igual.
+    const owner = await loginAs(app, "098000111");
+    http = api(app, owner.authHeader);
+    merchantId = await seedMerchant(app, "Café de la Esquina", owner.authHeader);
   });
 
   const addLocation = (address = "Av. Brasil 2500, Pocitos", label = "Pocitos") =>

@@ -6,6 +6,7 @@ import { api, clearOtpLimits, createTestApp, loginAs, resetDb, seedCustomer, see
 
 const PHONE = "099123456";
 const PHONE_E164 = "+59899123456";
+const OWNER_PHONE = "098000111"; // quien es dueña de los comercios de los tests
 
 describe("ingreso del cliente por código", () => {
   let app: FastifyInstance;
@@ -32,7 +33,7 @@ describe("ingreso del cliente por código", () => {
   it("GET /auth/config avisa el proveedor y el código de prueba", async () => {
     const res = await http.get("/auth/config");
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ otpProvider: "dev", devCode: "000000" });
+    expect(res.body).toMatchObject({ otpProvider: "dev", devCode: "000000", realPhonesConfigured: false });
   });
 
   describe("POST /auth/request-code", () => {
@@ -146,15 +147,16 @@ describe("ingreso del cliente por código", () => {
     });
 
     it("la persona que un comercio ya había anotado entra con ese mismo usuario", async () => {
-      const merchantId = await seedMerchant(app);
-      const customer = await seedCustomer(app, merchantId, PHONE, "Juancito");
+      const owner = await loginAs(app, OWNER_PHONE);
+      const merchantId = await seedMerchant(app, "Café de la Esquina", owner.authHeader);
+      const customer = await seedCustomer(app, merchantId, PHONE, "Juancito", owner.authHeader);
       const before = await db.user.findUniqueOrThrow({ where: { phone: PHONE_E164 } });
       expect(before.phoneVerifiedAt).toBeNull(); // existe, pero nunca verificó
 
       const { user } = await loginAs(app, PHONE);
       expect(user.id).toBe(customer.userId);
       expect(user.phoneVerifiedAt).not.toBeNull();
-      expect(await db.user.count()).toBe(1);
+      expect(await db.user.count()).toBe(2); // la dueña del comercio y la persona, no una tercera
     });
   });
 
@@ -196,7 +198,8 @@ describe("ingreso del cliente por código", () => {
 
   describe("sesión y /me", () => {
     it("sin token, con token falso o mal formado: 401 INVALID_SESSION", async () => {
-      for (const headers of [{}, { authorization: "Bearer nada" }, { authorization: "Basic abc" }]) {
+      const cases: Record<string, string>[] = [{}, { authorization: "Bearer nada" }, { authorization: "Basic abc" }];
+      for (const headers of cases) {
         const res = await http.get("/me", headers);
         expect(res.status).toBe(401);
         expect(res.body.code).toBe("INVALID_SESSION");
@@ -205,12 +208,14 @@ describe("ingreso del cliente por código", () => {
 
     it("GET y PATCH /me trabajan sobre el usuario de la sesión", async () => {
       const { authHeader, user } = await loginAs(app, PHONE);
-      expect((await http.get("/me", authHeader)).body.id).toBe(user.id);
+      const me = await http.get("/me", authHeader);
+      expect(me.body.user.id).toBe(user.id);
+      expect(me.body.merchants).toEqual([]); // todavía no es dueña de ningún comercio
 
       const patched = await http.patch("/me", { name: "Juan Pérez" }, authHeader);
       expect(patched.status).toBe(200);
       expect(patched.body.name).toBe("Juan Pérez");
-      expect((await http.get("/me", authHeader)).body.name).toBe("Juan Pérez");
+      expect((await http.get("/me", authHeader)).body.user.name).toBe("Juan Pérez");
     });
 
     it("logout deja de servir el token al instante", async () => {
@@ -251,15 +256,16 @@ describe("ingreso del cliente por código", () => {
 
   describe("GET /me/balances", () => {
     it("trae solo los saldos de la persona, también con saldo 0, y solo el perfil público del comercio", async () => {
-      const cafe = await seedMerchant(app, "Café");
-      const barber = await seedMerchant(app, "Barbería");
+      const owner = await loginAs(app, OWNER_PHONE);
+      const cafe = await seedMerchant(app, "Café", owner.authHeader);
+      const barber = await seedMerchant(app, "Barbería", owner.authHeader);
 
-      const mine = await seedCustomer(app, cafe, PHONE, "Juancito");
-      await seedCustomer(app, barber, PHONE); // ficha con saldo 0
-      const other = await seedCustomer(app, cafe, "098765432", "Otra persona");
+      const mine = await seedCustomer(app, cafe, PHONE, "Juancito", owner.authHeader);
+      await seedCustomer(app, barber, PHONE, undefined, owner.authHeader); // ficha con saldo 0
+      const other = await seedCustomer(app, cafe, "098765432", "Otra persona", owner.authHeader);
 
-      await http.post(`/customers/${mine.id}/topups`, { amount: 1000 });
-      await http.post(`/customers/${other.id}/topups`, { amount: 5000 });
+      await http.post(`/customers/${mine.id}/topups`, { amount: 1000 }, owner.authHeader);
+      await http.post(`/customers/${other.id}/topups`, { amount: 5000 }, owner.authHeader);
 
       const { authHeader } = await loginAs(app, PHONE);
       const res = await http.get("/me/balances", authHeader);

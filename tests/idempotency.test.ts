@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { db } from "../src/lib/db.js";
-import { api, createTestApp, resetDb, seedCustomer, seedMerchant } from "./helpers.js";
+import { api, createTestApp, loginAs, resetDb, seedCustomer, seedMerchant } from "./helpers.js";
 
 describe("idempotencia de cargas, cobros y ajustes", () => {
   let app: FastifyInstance;
@@ -10,15 +10,17 @@ describe("idempotencia de cargas, cobros y ajustes", () => {
 
   beforeAll(async () => {
     app = await createTestApp();
-    http = api(app);
   });
   afterAll(async () => {
     await app.close();
   });
   beforeEach(async () => {
     await resetDb();
-    const merchantId = await seedMerchant(app);
-    customerId = (await seedCustomer(app, merchantId, "099123456")).id;
+    // Todo lo del comercio lo hace su dueña, con su sesión.
+    const owner = await loginAs(app, "098000111");
+    http = api(app, owner.authHeader);
+    const merchantId = await seedMerchant(app, "Café de la Esquina", owner.authHeader);
+    customerId = (await seedCustomer(app, merchantId, "099123456", undefined, owner.authHeader)).id;
   });
 
   const movements = () => db.transaction.count({ where: { customerId } });

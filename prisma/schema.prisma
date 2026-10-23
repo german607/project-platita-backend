@@ -18,6 +18,12 @@ model Merchant {
   bonuses   BonusRule[]
   locations Location[]
 
+  // La persona dueña del comercio (la única que puede operarlo). Nulo en los
+  // comercios anteriores a los dueños, hasta asignarles uno (npm run
+  // db:assign-merchant); mientras sea nulo, nadie puede operarlos.
+  ownerId   String?
+  owner     User?     @relation("MerchantOwner", fields: [ownerId], references: [id])
+
   // Perfil público (lo que ve el cliente en la app). Todo opcional.
   description       String?
   photoUrl          String?
@@ -27,6 +33,7 @@ model Merchant {
   openingHours      Json?             // semana tipo, hora de Montevideo; ver src/lib/opening-hours.ts
 
   @@index([visible, category])
+  @@index([ownerId])
 }
 
 enum Plan {
@@ -92,6 +99,8 @@ model User {
   phoneVerifiedAt DateTime?
   customers Customer[]
   sessions  Session[]
+  // Comercios de los que es dueña (una persona puede tener varios).
+  ownedMerchants Merchant[] @relation("MerchantOwner")
 }
 
 // Sesión de un usuario: un token opaco de un solo valor que se manda como

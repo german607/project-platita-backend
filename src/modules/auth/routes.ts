@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import { config, otpProviderName } from "../../config.js";
-import { getUser, getUserBalances, updateUser } from "../users/service.js";
+import { config, otpProviderName, otpRealPhones } from "../../config.js";
+import { getMe, getUserBalances, updateUser } from "../users/service.js";
 import { updateUserBody } from "../users/schemas.js";
 import { authOf, requireSession } from "./guard.js";
 import { DEV_CODE } from "./otp/dev.js";
@@ -11,14 +11,15 @@ import { logout, requestCode, verifyCode } from "./service.js";
 // son las únicas que leen los saldos y el perfil de una persona: siempre del
 // usuario de la sesión, nunca de un id que mande el cliente.
 export async function authRoutes(app: FastifyInstance) {
-  app.decorateRequest("auth", null);
-
   // Qué proveedor hay, para que el front sepa si mostrar la ayuda del código
-  // de prueba. `devCode` solo viene con el proveedor "dev".
+  // de prueba. `devCode` solo viene con el proveedor "dev". Con
+  // `realPhonesConfigured` (modo mixto) 000000 vale para todos MENOS para
+  // algunos teléfonos que van por el proveedor real; nunca se dice cuáles.
   app.get("/auth/config", async () => ({
     otpProvider: otpProviderName,
     channel: config.OTP_CHANNEL,
     devCode: otpProviderName === "dev" ? DEV_CODE : null,
+    realPhonesConfigured: otpRealPhones.length > 0,
   }));
 
   // 204 siempre que el teléfono sea válido y no se pase de los límites.
@@ -40,7 +41,9 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.code(204).send();
     });
 
-    protectedApp.get("/me", async (req) => getUser(authOf(req).userId));
+    // La persona y las cuentas de comercio que tiene: el front decide con esto
+    // a qué área llevarla (cliente, comercio, o preguntarle a cuál).
+    protectedApp.get("/me", async (req) => getMe(authOf(req).userId));
 
     protectedApp.patch("/me", async (req) => updateUser(authOf(req).userId, updateUserBody.parse(req.body)));
 

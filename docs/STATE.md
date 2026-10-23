@@ -1,6 +1,6 @@
 # Estado actual — Platita
 
-> Última actualización: 2026-10-18. Esto es una foto del presente, se
+> Última actualización: 2026-10-22. Esto es una foto del presente, se
 > reescribe cuando deja de ser cierto — no es historial (eso es
 > [`CHANGELOG.md`](CHANGELOG.md)). Ver también [`../TODO.md`](../TODO.md)
 > y la regla de mantenimiento en [`AGENTS.md`](AGENTS.md).
@@ -135,11 +135,42 @@ decisiones: un solo token opaco guardado con hash (sin JWT ni refresh), 60
 días que se renuevan al usarlo; códigos de 5 minutos y 5 intentos; límites
 por teléfono e IP; proveedor intercambiable (`otp/`), hoy solo `dev`
 (acepta 000000). Producción se niega a arrancar con `dev` salvo
-`ALLOW_INSECURE_AUTH=true` (demos). **Proveedor real escrito (2026-10-20): Twilio Verify por SMS** (`otp/twilio.ts`,
+`ALLOW_INSECURE_AUTH=true` (demos). **Dueños de comercio y permisos (2026-10-22, pedido del frontend; verificado por
+los tests, falta probarlo con el front):** un comercio pertenece a una persona (`Merchant.ownerId`) y todo
+lo de `/merchants`, `/customers`, `/bonus-rules` y `/locations` exige sesión y
+ser la dueña (401 `INVALID_SESSION`, 403 `FORBIDDEN`, 404 si no existe).
+`POST /merchants` deja a la persona de la sesión como dueña, `GET /merchants`
+lista solo los suyos y `GET /me` devuelve `{ user, merchants }`. **Cambio que
+rompe al frontend actual**: el área del comercio deja de andar hasta que mande
+el token (y `GET /me` cambió de forma). Los comercios anteriores quedaron sin
+dueño: se asignan con `npm run db:assign-merchant`. Esto adelanta el "Auth
+para comercios" que se había postergado (`TODO.md` §2), pero con el ingreso por
+código en lugar de email y contraseña.
+
+**Quién puede crear comercios (2026-10-23, pedido del usuario; verificado por los
+tests, falta probarlo con el front):** `ALLOWED_MERCHANT_PHONES` (lista de teléfonos en una variable de
+entorno). Solo esos teléfonos pueden hacer `POST /merchants` (si no, 403
+`MERCHANT_CREATION_NOT_ALLOWED`); sin lista, abierto en desarrollo y tests y
+**cerrado en producción**. `GET /me` suma `canCreateMerchant`. No afecta a quien
+ya es dueña de un comercio.
+
+**Modo mixto (2026-10-21, probado por el usuario con el frontend y por los tests):** `OTP_REAL_PHONES` lista
+teléfonos que se verifican de verdad con Twilio mientras el resto entra con
+000000 (para probar con tu número sin perder la comodidad del código de
+prueba). **Proveedor real (2026-10-20, mergeado en `dev` con el PR #8): Twilio Verify por SMS** (`otp/twilio.ts`,
 verificado con `tsc` y con tests contra un `fetch` simulado, sin haber mandado
 todavía un SMS de verdad). Falta probarlo con la cuenta de prueba y el celular, y quitar
 `/users/*` cuando el front use `/me/*`. También se sumó vitest con tests de
 ingreso, idempotencia y perfil/lugares.
+
+**Seed de desarrollo (2026-10-22, verificado por los tests; falta correrlo a mano):** `npm run db:seed` carga
+personas con teléfonos fijos (`+59899000001` dueña de dos comercios,
+`+59899000002` solo cliente, `+59899000003` dueña de tres), cinco comercios
+visibles y clientes con saldos y movimientos en fechas distintas, y se puede
+repetir sin duplicar; `npm run db:reset-seed` vacía toda la base de desarrollo y
+recarga. Ambos solo corren en local. Todos entran con `000000`. El `.env.example`
+nuevo quedó en `docs/env.example.txt` para copiar a mano (la sesión de la IA no
+puede editar `.env.example`).
 
 Consola de pruebas local en `GET /dev` (`src/dev/console.ts`), con todos
 los endpoints en orden de uso; solo si `NODE_ENV !== "production"`.

@@ -13,7 +13,8 @@ entorno (todas validadas en `src/config.ts`): `DATABASE_URL`, `PORT`
 producción y apagadas en producción: ver Usuarios), las del ingreso real
 (`OTP_PROVIDER`, `OTP_CHANNEL`, `ALLOW_INSECURE_AUTH`, `SESSION_TTL_DAYS`,
 `TRUST_PROXY`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_VERIFY_SID`,
-`TWILIO_LOCALE`: ver Ingreso real) y `CORS_ORIGINS` (orígenes del frontend
+`TWILIO_LOCALE`, `OTP_REAL_PHONES`: ver Ingreso real) y `ALLOWED_MERCHANT_PHONES` (quién
+puede crear comercios: ver Dueño y permisos) y `CORS_ORIGINS` (orígenes del frontend
 separados por coma, ej. `https://app.platita.uy,http://localhost:5173`;
 vacío = sin CORS; nunca `*`). Con CORS habilitado se aceptan los headers
 `Content-Type`, `Authorization` e `Idempotency-Key`, los métodos GET,
@@ -45,7 +46,7 @@ src/
     locations/         locales de un comercio (solo cambia la dirección)
     places/            vista PÚBLICA de comercios para el cliente (/places)
     users/             el usuario global (la persona) y sus saldos; SIN verificación
-    auth/              ingreso del cliente por código, sesiones y /me (otp/ = proveedores del código)
+    auth/              ingreso por código, sesiones, /me y los permisos del comercio (access.ts); otp/ = proveedores del código
   dev/console.ts       consola de pruebas /dev (solo fuera de producción)
 tests/                 tests de integración (vitest) contra una base de pruebas
 ```
@@ -68,11 +69,12 @@ Cada módulo tiene los mismos tres archivos:
 - **Un servicio necesita otra área:** importa el servicio de esa área
   (ej. `requireMerchant` de `merchants/service.ts`), nunca su
   `routes.ts`.
-- **Autenticación (todavía no existe):** va como hook `onRequest` /
-  plugin en `app.ts` o por módulo en su `routes.ts`; ningún servicio
-  debería necesitar cambiar. Los servicios hoy reciben ids sueltos: al
-  sumar auth, el `merchantId` del usuario autenticado reemplaza al de la
-  URL.
+- **Permisos:** van como hooks, nunca dentro de un servicio. Un módulo
+  nuevo del comercio se registra dentro de la "zona del comercio" de
+  `modules/index.ts` (sesión + dueña) y su ruta necesita una regla en
+  `auth/access.ts`: ese archivo falla cerrado (una ruta protegida sin regla da
+  500 en vez de dejar pasar). Un módulo público va fuera de esa zona. Los
+  servicios siguen recibiendo ids ya autorizados.
 - **Trabajo en segundo plano (WhatsApp, campañas):** es un módulo nuevo
   que usa los servicios existentes; no se mete en `ledger`.
 - **Tests:** `buildApp()` devuelve la app sin puerto, así que se prueba
@@ -249,6 +251,24 @@ User (la persona, por teléfono)
     antemano en su consola, y cada verificación gasta de las gratis.
     **El servicio de Verify tiene que estar configurado con códigos de 6
     dígitos** (el backend valida exactamente 6) y el canal SMS activado.
+  - **Modo mixto** (`OTP_REAL_PHONES`): para un entorno de prueba donde
+    "cualquiera entra con 000000" pero unos teléfonos concretos se verifican de
+    verdad. Con `OTP_PROVIDER=dev`, los teléfonos de la lista (separados por
+    coma, en cualquier formato uruguayo; se normalizan) pasan **siempre** por
+    Twilio, tanto al mandar como al comprobar el código, así que 000000 **no
+    les sirve** y nadie puede entrar como esa persona. El resto sigue con 000000.
+    Pide las tres credenciales de Twilio; no se combina con
+    `OTP_PROVIDER=twilio` (ya son todos reales); un elemento que no es un
+    teléfono uruguayo hace fallar el arranque (el mensaje dice cuál, no su
+    valor). Lo implementa `otp/routing.ts` (`createRoutingProvider`), que reparte
+    cada teléfono entre dos proveedores sin tocar el servicio. **Es solo para
+    entornos de prueba**: en producción sigue exigiendo `ALLOW_INSECURE_AUTH`
+    (el resto de los teléfonos entra con 000000) y el log avisa.
+    `GET /auth/config` suma `realPhonesConfigured` (booleano; nunca devuelve
+    cuáles son los teléfonos) para que el front matice la ayuda del código.
+    Alternativa más segura para producción, **no implementada**: al revés,
+    Twilio para todos y 000000 solo para una lista de teléfonos de prueba (por
+    ejemplo para revisores de una tienda de apps).
   - **Cambiar o sumar un proveedor**: (1) crear `otp/<nombre>.ts` que cumpla `OtpProvider`, devolviendo
     `approved`, `incorrect`, `expired` o `too_many_attempts` en `check`;
     (2) sumarlo al mapa de `otp/index.ts` y al enum `OTP_PROVIDER` de
@@ -259,6 +279,43 @@ User (la persona, por teléfono)
   - Las rutas `/users/*` (ingreso sin verificar) siguen existiendo por ahora
     y se eliminan, junto con `INSECURE_USER_ROUTES`, cuando el front pase a
     `/me/*`.
+- **Dueño y permisos del comercio**: un comercio pertenece a una persona
+  (`Merchant.ownerId` → `User`); una persona puede ser dueña de varios y a la
+  vez clienta de otros. **Todo lo de `/merchants`, `/customers`,
+  `/bonus-rules` y `/locations` sale de la sesión** (`Authorization: Bearer`)
+  y exige que la persona sea la dueña del comercio al que apunta el pedido
+  (para `/customers/:id`, `/bonus-rules/:id` y `/locations/:id`, el comercio
+  del cliente, la regla o el local). Sin sesión o con una sesión inválida: 401
+  `INVALID_SESSION`. Con un comercio ajeno: 403 `FORBIDDEN`. Si el comercio,
+  cliente, regla o local no existe: 404 (el 403 solo aparece sobre algo que
+  existe). Lo resuelven `requireSession` y `authorizeMerchantAccess` (hooks de
+  la zona del comercio en `modules/index.ts`; reglas en `auth/access.ts`).
+  Quedan públicos: `/places*`, `/auth/*`, `/health` y, solo fuera de
+  producción, `/dev` y `/users/*`. El preflight de CORS no pide sesión.
+  - **Crear un comercio** (`POST /merchants`) exige sesión y deja a la persona
+    como dueña: así se "crea una cuenta de comercio". **No cualquiera puede
+    crearlo: los comercios los habilitamos nosotros.** Solo pueden los teléfonos
+    de la variable de entorno `ALLOWED_MERCHANT_PHONES` (separados por coma, en
+    cualquier formato uruguayo; se normalizan y un elemento que no es un
+    teléfono hace fallar el arranque). Quien no está en la lista recibe 403
+    `MERCHANT_CREATION_NOT_ALLOWED`. **Sin lista:** en desarrollo y tests puede
+    cualquiera (para probar) y en **producción nadie** (se cierra en vez de abrirse
+    por un olvido; el log avisa al arrancar). Esto solo controla el alta: quien ya
+    es dueña de un comercio lo sigue operando aunque no esté en la lista, y
+    `db:assign-merchant` y el seed no pasan por acá. `GET /me` trae
+    `canCreateMerchant` para que el front muestre u oculte "crear cuenta de
+    comercio". La regla vive en `merchants/policy.ts`. `GET /merchants` lista
+    **solo los comercios de la sesión** (ya no hay lista de todos).
+  - **`GET /me`** devuelve `{ user, merchants: [{ id, name }], canCreateMerchant }`:
+    con eso el front decide a qué área llevar a la persona (cliente, comercio, o
+    preguntarle a cuál si tiene varias).
+  - **Comercios anteriores a los dueños** quedaron con `ownerId` nulo: nadie
+    los puede operar (403 para todos) hasta asignarles uno con
+    `npm run db:assign-merchant -- <idDelComercio> <teléfono>` (`--list` muestra
+    los que no tienen dueño). Un comercio sin dueño sigue apareciendo en
+    `/places` si es visible.
+  - Un solo dueño por comercio. Dueño/cajero con permisos distintos, traspaso
+    de dueño y un tope de comercios por persona **no están hechos** (`TODO.md`).
 - **Lugares** (`/places`): vista pública (sin sesión) de los comercios con
   `visible = true`. Solo expone el perfil público (nombre, categoría,
   descripción, foto, locales activos, horarios y promos activas); nunca
@@ -308,7 +365,8 @@ User (la persona, por teléfono)
 - `Customer` — `id`, `merchantId`, `userId`, `phone`, `name?`,
   `lastVisitAt?`. Único por (`merchantId`, `phone`). Índices
   (`merchantId`, `lastVisitAt`) y (`userId`).
-- `Merchant` — `id`, `name`, `phone?`, `plan`, `createdAt` y el perfil
+- `Merchant` — `id`, `name`, `phone?`, `plan`, `createdAt`, `ownerId?` (la
+  dueña; índice) y el perfil
   público: `description?`, `photoUrl?`, `category?`, `categoryChangedAt?`,
   `visible` (default `false`), `openingHours?` (JSON). Índice
   (`visible`, `category`).
@@ -336,22 +394,23 @@ Los índices originales están en la migración
 `20261013150000_idempotencia_y_origen_de_bonos` y
 `20261015120000_perfil_publico_y_locales` y
 `20261016120000_usuarios_globales` (crea un usuario por cada teléfono
-existente y enlaza las fichas) y `20261018120000_ingreso_real_sesiones_y_otp`.
+existente y enlaza las fichas), `20261018120000_ingreso_real_sesiones_y_otp` y
+`20261022120000_duenos_de_comercio` (agrega `Merchant.ownerId`).
 
 ## Endpoints
 
 | Método | Ruta | Qué hace |
 |---|---|---|
 | GET | `/health` | Chequeo de vida |
-| POST | `/merchants` | Crea un comercio |
-| GET | `/merchants` | Lista comercios (paginado) |
+| POST | `/merchants` | **Sesión y teléfono habilitado** (`ALLOWED_MERCHANT_PHONES`). Crea un comercio y la persona queda como dueña; 403 `MERCHANT_CREATION_NOT_ALLOWED` si no está habilitada |
+| GET | `/merchants` | **Sesión.** Lista los comercios de la sesión (paginado) |
 | GET | `/merchants/:id` | Un comercio |
 | PATCH | `/merchants/:id` | Edita un comercio y su perfil público (categoría, visibilidad, horarios…) |
 | GET | `/auth/config` | Proveedor de códigos en uso, canal y `devCode` (solo con `dev`) |
 | POST | `/auth/request-code` | `{ phone }` → 204. Manda el código; 429 si pide demasiados |
 | POST | `/auth/verify-code` | `{ phone, code }` → `{ token, expiresAt, user }`. Crea al usuario si no existía |
 | POST | `/auth/logout` | **Sesión.** 204; cierra la sesión actual |
-| GET | `/me` | **Sesión.** El usuario |
+| GET | `/me` | **Sesión.** `{ user, merchants: [{ id, name }], canCreateMerchant }`: la persona, sus cuentas de comercio y si puede crear una nueva |
 | PATCH | `/me` | **Sesión.** La persona cambia su nombre |
 | GET | `/me/balances` | **Sesión.** Saldos en cada comercio (`{ data: [{ merchant, balance, lastVisitAt }] }`) |
 | POST | `/users` | **Sin verificar, solo si `INSECURE_USER_ROUTES`.** Se identifica con el teléfono: busca o crea el usuario |
@@ -379,13 +438,13 @@ existente y enlaza las fichas) y `20261018120000_ingreso_real_sesiones_y_otp`.
 | POST | `/customers/:id/adjustments` | Corrección manual con signo (acepta `Idempotency-Key`) |
 | GET | `/customers/:id/transactions?type=` | Libro mayor del cliente (paginado) |
 
-Ninguno tiene autenticación todavía (`/places` es público a propósito).
+**Zona del comercio:** todas las rutas de `/merchants/…`, `/customers/…`, `/bonus-rules/…` y `/locations/…` de esta tabla exigen sesión **y ser la dueña del comercio** (401 `INVALID_SESSION` sin sesión, 403 `FORBIDDEN` con un comercio ajeno). `/places*` y `/auth/*` son públicos (`/auth/logout` y `/me*` piden sesión).
 
 ## Tests
 
 `npm test` corre vitest (`tests/`) contra Postgres real con `app.inject()`:
 ingreso y sesión (`auth.test.ts`), el proveedor de Twilio con un `fetch`
-simulado (`twilio-provider.test.ts`), las reglas de arranque de la
+simulado (`twilio-provider.test.ts`), el modo mixto (`routing-provider.test.ts`), las reglas de arranque de la
 configuración (`config.test.ts`), idempotencia y cobros simultáneos
 (`idempotency.test.ts`) y perfil público, locales y `/places`
 (`places.test.ts`). Los tests **vacían las tablas**, por eso usan una base
@@ -398,6 +457,40 @@ docker compose exec db createdb -U platita platita_test
 ```
 
 Las migraciones se aplican solas al empezar. Detalle en [`CI.md`](CI.md).
+
+## Herramientas de desarrollo
+
+- `npm run db:seed`: carga datos de ejemplo (`scripts/lib/seed.ts`): tres
+  personas con teléfonos fijos (`+59899000001` Ana, dueña de dos comercios;
+  `+59899000002` Beto, solo cliente con saldo en tres comercios;
+  `+59899000003` Carla, dueña de tres comercios y clienta de uno), cinco
+  comercios visibles en categorías distintas (con descripción, foto por URL
+  placeholder, uno o dos locales, horarios variados y promos con nombre) y
+  clientes con saldos y movimientos de cargas, bonos y cobros en fechas pasadas,
+  incluidos saldo 0, clientes sin venir hace más de 30 días y nombres distintos
+  entre el comercio y la persona. Los bonos salen de las promos del comercio
+  (con `bonusRuleId`), como en la API. Repetirlo **no duplica**: borra y vuelve
+  a crear solo lo que cuelga de los comercios del seed (ids `seed_*`); las
+  personas se reutilizan por teléfono y lo demás de la base no se toca. Imprime
+  qué teléfono entra a qué cuenta (todos con el código `000000`).
+- `npm run db:reset-seed`: **vacía TODA la base de desarrollo** (también lo que
+  cargaste a mano; las personas tienen que volver a ingresar) y vuelve a cargar
+  el seed. Las tablas y las migraciones no se tocan.
+- Ambos se niegan a correr con `NODE_ENV=production` o contra una base que no
+  sea local (`scripts/lib/dev-guard.ts`).
+
+- `npm run db:assign-merchant -- <idDelComercio> <teléfono>`: le asigna una
+  dueña a un comercio (busca o crea a la persona por teléfono; si ya tenía otro
+  dueño, lo cambia). `--list` muestra los comercios sin dueño. Por seguridad
+  solo corre contra una base local y fuera de producción; para una base remota
+  hay que pedirlo con `--force-remote`. Código en `scripts/assign-merchant.ts`.
+- `npm run db:delete-user -- 099123456`: borra a la persona con ese teléfono
+  (en cualquier formato) y todo lo que cuelga de ella: sesiones, fichas en los
+  comercios con sus movimientos y claves de idempotencia, y los pedidos de
+  código de ese teléfono (para saltear el límite de 30 s). Sirve para repetir
+  el ingreso desde cero. Los movimientos son del libro mayor: **solo datos de
+  prueba**. Se niega a correr con `NODE_ENV=production` o contra una base que
+  no sea local. Código en `scripts/delete-user.ts`.
 
 ## Consola de pruebas (`/dev`)
 
