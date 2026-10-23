@@ -29,7 +29,7 @@ Corre en cada PR hacia `dev` o `main` y en cada push a esas ramas.
 | `prisma migrate diff` | Que `schema.prisma` no tenga cambios sin migración |
 | `npm run build` + `/health` | Que la API compile y levante |
 | `npm test --if-present` | Los tests (vitest, `tests/`). En el CI usan la base del job (`DATABASE_URL`, `CI=true`); en local, `platita_test` (ver `BACKEND.md`) |
-| Imagen Docker (solo PRs) | Que el `Dockerfile` arme, que las migraciones corran dentro del contenedor y que la imagen responda `/health` |
+| Imagen Docker (solo PRs) | Que el `Dockerfile` arme, que las migraciones corran dentro del contenedor y que la imagen responda `/health`. Se levanta con la configuración de producción (Twilio con credenciales de mentira): sin un proveedor de códigos real la imagen no arranca a propósito |
 
 ### 2. Revisión IA (`ai-review.yml`)
 
@@ -138,8 +138,17 @@ commit mergeado:
 - La imagen no corre migraciones sola. Al desplegar:
   ```bash
   docker run --rm -e DATABASE_URL=... ghcr.io/german607/project-platita-backend:develop npx prisma migrate deploy
-  docker run -d -e DATABASE_URL=... -p 3000:3000 ghcr.io/german607/project-platita-backend:develop
+  docker run -d -e DATABASE_URL=... -e OTP_PROVIDER=twilio -e TWILIO_ACCOUNT_SID=... \
+    -e TWILIO_AUTH_TOKEN=... -e TWILIO_VERIFY_SID=... -p 3000:3000 \
+    ghcr.io/german607/project-platita-backend:develop
   ```
+- **La imagen corre con `NODE_ENV=production` (también la del stage `develop`)
+  y se niega a arrancar sin un proveedor de códigos real**: hace falta
+  `OTP_PROVIDER=twilio` con sus tres credenciales, o, para una demo con el código
+  de prueba `000000`, `ALLOW_INSECURE_AUTH=true` (el log lo avisa en grande). Sin
+  `ALLOWED_MERCHANT_PHONES` nadie puede crear comercios, y las rutas
+  `/users/*` no existen salvo `INSECURE_USER_ROUTES=true`. Detalle en
+  [`BACKEND.md`](BACKEND.md).
 - `packages.yml` se dispara con `workflow_run`, que usa la versión del
   archivo en la rama por defecto (`dev`). Un cambio a este workflow aplica
   desde que se mergea en `dev`.

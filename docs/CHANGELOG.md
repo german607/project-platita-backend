@@ -692,3 +692,23 @@ correr.**
 - El usuario corrió `tsc --noEmit`, `tsc --noEmit -p tests` (limpios) y `npm test`: **118 de
   118 tests en verde** (9 archivos), incluidos `merchant-creation.test.ts` y los casos nuevos
   de `config.test.ts`. Falta probarlo con el front (`canCreateMerchant` en `GET /me`).
+
+## 2026-10-23 (arreglo del CI: la imagen Docker)
+
+El job **Imagen Docker** del PR falló: el contenedor no respondió `/health`. Causa:
+la imagen corre con `NODE_ENV=production` (Dockerfile) y, desde que se agregó el
+ingreso real, `config.ts` **se niega a arrancar en producción con el proveedor de
+códigos de prueba** salvo `ALLOW_INSECURE_AUTH=true`. El CI levantaba el contenedor
+solo con `DATABASE_URL`, así que la guarda lo frenó (funcionó como estaba pensado: no
+fue un error del código). Arreglo, sin tocar la guarda:
+
+- `ci.yml`: el contenedor se levanta con la configuración de producción real,
+  `OTP_PROVIDER=twilio` y credenciales **de mentira** con el formato que se valida
+  (`AC…`, `VA…`). Al arrancar no se llama a Twilio, así que alcanza para comprobar que
+  la imagen levanta. Se eligió esto y no `ALLOW_INSECURE_AUTH=true` para no probar un
+  camino que no es el de producción.
+- `Dockerfile` y `docs/CI.md`: documentan que la imagen necesita un proveedor real
+  (o `ALLOW_INSECURE_AUTH` para demos), que sin `ALLOWED_MERCHANT_PHONES` nadie crea
+  comercios y que `/users/*` no existe sin `INSECURE_USER_ROUTES=true`.
+- Importante para el despliegue: cualquier lugar donde se corra la imagen (incluido
+  el stage `develop`) necesita esas variables, o no arranca.

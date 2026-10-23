@@ -128,6 +128,7 @@ Este es el **único backlog** del proyecto (ver `docs/AGENTS.md`). El estado gen
 - [ ] **P0** Protección de ramas de `dev` y `main` con los checks requeridos y 1 aprobación (pasos en `docs/CI.md`; después de la primera corrida)
 - [ ] **P1** Lint (ESLint) como paso del CI
 - [ ] **P1** Despliegue en un proveedor barato (Railway, Render o Fly.io) + Postgres gestionado: desplegar la imagen `develop` y la `production` desde `packages.yml` (CD)
+- [ ] **P1** Variables de entorno de cada entorno desplegado (incluido el stage `develop`, que también corre con `NODE_ENV=production`): `OTP_PROVIDER=twilio` y sus tres credenciales (o `ALLOW_INSECURE_AUTH=true` solo para una demo), `ALLOWED_MERCHANT_PHONES`, `CORS_ORIGINS` y `TRUST_PROXY` si hay un proxy delante; sin las de ingreso la imagen no arranca (`docs/CI.md`)
 - [ ] **P1** Backups automáticos de la base
 - [ ] **P2** Monitoreo y alertas
 

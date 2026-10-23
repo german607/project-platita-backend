@@ -2,8 +2,15 @@
 # (.github/workflows/packages.yml) y se valida en cada PR (ci.yml).
 #
 # Uso:
-#   docker run -e DATABASE_URL=... -p 3000:3000 <imagen>
+#   docker run -e DATABASE_URL=... -e OTP_PROVIDER=twilio -e TWILIO_ACCOUNT_SID=... \
+#     -e TWILIO_AUTH_TOKEN=... -e TWILIO_VERIFY_SID=... -p 3000:3000 <imagen>
 #   docker run -e DATABASE_URL=... <imagen> npx prisma migrate deploy   # migraciones
+#
+# La imagen corre con NODE_ENV=production: sin un proveedor de códigos real
+# (OTP_PROVIDER=twilio y sus credenciales) NO arranca. Para una demo con el
+# código de prueba 000000 hay que pedirlo a propósito con ALLOW_INSECURE_AUTH=true.
+# Además, ALLOWED_MERCHANT_PHONES define quién puede crear comercios: sin ella,
+# nadie puede en producción.
 
 # --- build: dependencias completas, cliente de Prisma y compilación ---
 FROM node:22-bookworm-slim AS build
