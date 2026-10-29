@@ -712,3 +712,41 @@ fue un error del código). Arreglo, sin tocar la guarda:
   comercios y que `/users/*` no existe sin `INSECURE_USER_ROUTES=true`.
 - Importante para el despliegue: cualquier lugar donde se corra la imagen (incluido
   el stage `develop`) necesita esas variables, o no arranca.
+
+## 2026-10-25 (despliegue en Render + Neon)
+
+Pedido del frontend para desplegar (API en Render gratis, base en Neon gratis, front en
+Cloudflare Pages). Rama nueva `jeronimo/despliegue-render-neon`, creada desde
+`jeronimo/duenos-de-comercio-y-modo-mixto` (el PR de los dueños sigue en revisión) porque es
+un tema distinto. **Escrito sin poder correr** (la sesión de la IA no ejecuta `tsc` ni los tests).
+Antes de afirmar nada se leyó la documentación de Render, Neon y Twilio.
+
+- **1. Comandos de Render**: los propuestos están bien. Se pasaron a `scripts/render-build.sh` (una
+  sola línea en el yaml) con un reintento de la migración, y se fija `NODE_VERSION=22` (Render elige
+  `NODE_VERSION` > `.node-version` > `.nvmrc` > `engines`). En el plan gratis no hay pre-deploy command
+  (es de planes pagos), por eso se migra al final del build.
+- **2. `render.yaml`**: servicio web gratis en Ohio con `healthCheckPath: /health`, variables fijas
+  (`NODE_VERSION`, `NODE_ENV`, `TRUST_PROXY`) y las demás con `sync: false` (se piden al crearlo). La
+  base no va en el yaml (es de Neon).
+- **3. Freno de `db:seed` y `db:reset-seed`**: `scripts/lib/dev-guard.ts` ahora es una función pura
+  (`evaluateGuard`) probada con tests: **nunca** con `NODE_ENV=production` (no se puede forzar) y con
+  una base no local solo con `--yes`, diciendo contra cuál iba a escribir sin mostrar la contraseña.
+  Antes se negaba siempre con una base remota. `delete-user` y `assign-merchant` siguen con su regla
+  propia.
+- **4. `APP_NAME`** (hasta 30 caracteres, por defecto `Platita`): la consola `/dev` (escapado para HTML),
+  `GET /auth/config` (`appName`) y el texto del SMS (Twilio `CustomFriendlyName`, que pisa el nombre del
+  servicio de Verify; no probado con la cuenta real). El nombre técnico de la base local sale de `APP_SLUG`
+  en `docker-compose.yml` (por defecto `platita`, solo aplica al crear el volumen). No se tocó el nombre
+  del contenedor ni del volumen para no dejar sin datos a quien ya tiene la base local. El resto del
+  nombre (`package.json`, imágenes, workflows, docs) sigue a mano: lista en `docs/DESPLIEGUE.md` §6.
+- **5. Neon al despertar**: el `connect_timeout` de Prisma es 5 s por defecto y Neon recomienda 15; se
+  documenta la cadena de conexión (`?sslmode=require&connect_timeout=15&pool_timeout=20`, conexión
+  directa y no pooled). Código: `connectWithRetry` (hasta 6 intentos al arrancar, unos 30 s) y el manejo
+  de errores de base caída como `503 DATABASE_UNAVAILABLE` con `Retry-After: 2` (P1001, P1002, P1008,
+  P1017); otros errores de Prisma, como una contraseña mal puesta (P1000), siguen siendo 500. `/health`
+  sigue sin tocar la base para no mantener despierta a Neon.
+- Tests nuevos: `dev-guard`, `db-connect` (con reloj simulado), `error-handler`, `app-name`, y casos en
+  `config` y `twilio-provider`.
+- **No se pudo confirmar** en la documentación: cuánto tarda en despertar Render, si Prisma deja una
+  conexión rota (P1017) en el primer pedido tras la suspensión de Neon, y si el CLI de Prisma respeta
+  `connect_timeout` al migrar. Todo está cubierto con reintentos y marcado como pendiente de verificar.

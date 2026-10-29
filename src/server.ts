@@ -1,6 +1,6 @@
 import { buildApp } from "./app.js";
 import { allowedMerchantPhones, config, isProduction, usingInsecureAuth } from "./config.js";
-import { db } from "./lib/db.js";
+import { connectWithRetry, db } from "./lib/db.js";
 import { deleteExpiredIdempotencyKeys } from "./lib/idempotency.js";
 import { deleteExpiredAuthData } from "./modules/auth/cleanup.js";
 
@@ -33,6 +33,17 @@ if (usingInsecureAuth) {
   app.log.warn(
     "ATENCIÓN: ingreso con el proveedor de prueba (código 000000) en producción: cualquiera que conozca un teléfono entra. Solo para demos.",
   );
+}
+
+// La base puede estar dormida (Neon gratis): se reintenta antes de rendirse. Lo
+// hace antes de abrir el puerto, así el primer pedido ya la encuentra despierta.
+try {
+  await connectWithRetry(db, {
+    onRetry: (attempt) => app.log.warn(`La base no respondió (intento ${attempt}); reintento en unos segundos…`),
+  });
+} catch (err) {
+  app.log.error(err, "No se pudo conectar a la base de datos");
+  process.exit(1);
 }
 
 try {

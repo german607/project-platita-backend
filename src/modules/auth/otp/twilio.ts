@@ -18,6 +18,12 @@ export type TwilioConfig = {
   verifySid: string;
   /** Idioma del texto del SMS, ej. "es". Opcional. */
   locale?: string;
+  /**
+   * Nombre de la app que aparece en el texto del mensaje ("Tu código de <nombre>…").
+   * Se manda en cada pedido (CustomFriendlyName, máx. 30 caracteres) y pisa el
+   * nombre del servicio de Verify. Opcional.
+   */
+  friendlyName?: string;
 };
 
 type Deps = {
@@ -87,6 +93,7 @@ export function createTwilioProvider(cfg: TwilioConfig, deps: Deps = {}): OtpPro
     async start(phone: string, channel: OtpChannel) {
       const form: Record<string, string> = { To: phone, Channel: channel };
       if (cfg.locale) form.Locale = cfg.locale;
+      if (cfg.friendlyName) form.CustomFriendlyName = cfg.friendlyName;
       const { httpStatus, body } = await post("Verifications", form);
       if (httpStatus < 200 || httpStatus >= 300) throw failure(httpStatus, body);
     },

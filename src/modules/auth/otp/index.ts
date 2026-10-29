@@ -1,4 +1,4 @@
-import { config, otpProviderName, otpRealPhones } from "../../../config.js";
+import { appName, config, otpProviderName, otpRealPhones } from "../../../config.js";
 import { devProvider } from "./dev.js";
 import type { OtpProvider } from "./provider.js";
 import { createRoutingProvider } from "./routing.js";
@@ -15,6 +15,7 @@ const twilio = () =>
     authToken: config.TWILIO_AUTH_TOKEN!,
     verifySid: config.TWILIO_VERIFY_SID!,
     locale: config.TWILIO_LOCALE || undefined,
+    friendlyName: appName,
   });
 
 const factories: Record<string, () => OtpProvider> = {

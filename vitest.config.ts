@@ -10,6 +10,8 @@ export default defineConfig({
     testTimeout: 20_000,
     env: {
       NODE_ENV: "test",
+      // El nombre de la app de los tests (no el del .env de quien los corre).
+      APP_NAME: "Platita",
       DATABASE_URL: TEST_DATABASE_URL,
       // El proveedor de códigos de los tests es siempre el de prueba.
       OTP_PROVIDER: "dev",

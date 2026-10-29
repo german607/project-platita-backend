@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { config, otpProviderName, otpRealPhones } from "../../config.js";
+import { appName, config, otpProviderName, otpRealPhones } from "../../config.js";
 import { getMe, getUserBalances, updateUser } from "../users/service.js";
 import { updateUserBody } from "../users/schemas.js";
 import { authOf, requireSession } from "./guard.js";
@@ -16,6 +16,7 @@ export async function authRoutes(app: FastifyInstance) {
   // `realPhonesConfigured` (modo mixto) 000000 vale para todos MENOS para
   // algunos teléfonos que van por el proveedor real; nunca se dice cuáles.
   app.get("/auth/config", async () => ({
+    appName,
     otpProvider: otpProviderName,
     channel: config.OTP_CHANNEL,
     devCode: otpProviderName === "dev" ? DEV_CODE : null,

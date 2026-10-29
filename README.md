@@ -144,6 +144,10 @@ el código `000000`. `npm run db:reset-seed` **borra toda la base de desarrollo*
 y vuelve a cargar los datos de ejemplo. Ambos se niegan a correr en producción
 o contra una base que no sea local.
 
+**Desplegar.** La API va en Render y la base en Neon (planes gratis): la guía paso a paso, las
+variables y qué pasa cuando se duermen está en [`docs/DESPLIEGUE.md`](docs/DESPLIEGUE.md) y el
+Blueprint en `render.yaml`.
+
 **Ingreso de prueba y SMS reales.** Con `OTP_PROVIDER=dev` (el valor por defecto
 en `.env.example`) cualquier teléfono entra con `000000`. Para probar un SMS real
 con tu número sin perder eso, ver `OTP_REAL_PHONES` en `.env.example` y la sección

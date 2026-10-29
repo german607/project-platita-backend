@@ -149,6 +149,7 @@ commit mergeado:
   `ALLOWED_MERCHANT_PHONES` nadie puede crear comercios, y las rutas
   `/users/*` no existen salvo `INSECURE_USER_ROUTES=true`. Detalle en
   [`BACKEND.md`](BACKEND.md).
+- La API también se puede desplegar sin Docker, desde el código, en Render (`render.yaml`): ver [`DESPLIEGUE.md`](DESPLIEGUE.md).
 - `packages.yml` se dispara con `workflow_run`, que usa la versión del
   archivo en la rama por defecto (`dev`). Un cambio a este workflow aplica
   desde que se mergea en `dev`.
