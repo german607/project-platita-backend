@@ -14,7 +14,9 @@ producción y apagadas en producción: ver Usuarios), las del ingreso real
 (`OTP_PROVIDER`, `OTP_CHANNEL`, `ALLOW_INSECURE_AUTH`, `SESSION_TTL_DAYS`,
 `TRUST_PROXY`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_VERIFY_SID`,
 `TWILIO_LOCALE`, `OTP_REAL_PHONES`: ver Ingreso real) y `ALLOWED_MERCHANT_PHONES` (quién
-puede crear comercios: ver Dueño y permisos) y `CORS_ORIGINS` (orígenes del frontend
+puede crear comercios: ver Dueño y permisos) y `APP_NAME` (nombre que se muestra; por defecto
+`Platita`, hasta 30 caracteres: lo usan la consola `/dev`, `GET /auth/config` y el texto del SMS
+con `CustomFriendlyName`). Despliegue en Render + Neon: [`DESPLIEGUE.md`](DESPLIEGUE.md) y `CORS_ORIGINS` (orígenes del frontend
 separados por coma, ej. `https://app.platita.uy,http://localhost:5173`;
 vacío = sin CORS; nunca `*`). Con CORS habilitado se aceptan los headers
 `Content-Type`, `Authorization` e `Idempotency-Key`, los métodos GET,
@@ -352,7 +354,8 @@ User (la persona, por teléfono)
   (`VALIDATION_ERROR`, `NOT_FOUND`, `CONFLICT`, `INSUFFICIENT_BALANCE`,
   `INTERNAL_ERROR`…); el mensaje es para humanos y puede cambiar.
 - **Códigos**: 201 al crear, 400 validación, 404 no existe, 409
-  conflicto, 422 regla de negocio.
+  conflicto, 422 regla de negocio, 503 `DATABASE_UNAVAILABLE` (la base no respondió: pasa al
+  despertar una base gratis que se durmió; trae `Retry-After: 2` y conviene reintentar).
 - **Listados**: `{ data: [...], nextCursor }` con `?limit=50&cursor=<id>`
   (limit máx. 200). `nextCursor: null` = no hay más. Hay que ordenar
   siempre con `id` como último criterio.
@@ -406,7 +409,7 @@ existente y enlaza las fichas), `20261018120000_ingreso_real_sesiones_y_otp` y
 | GET | `/merchants` | **Sesión.** Lista los comercios de la sesión (paginado) |
 | GET | `/merchants/:id` | Un comercio |
 | PATCH | `/merchants/:id` | Edita un comercio y su perfil público (categoría, visibilidad, horarios…) |
-| GET | `/auth/config` | Proveedor de códigos en uso, canal y `devCode` (solo con `dev`) |
+| GET | `/auth/config` | Nombre de la app (`appName`), proveedor de códigos en uso, canal y `devCode` (solo con `dev`) |
 | POST | `/auth/request-code` | `{ phone }` → 204. Manda el código; 429 si pide demasiados |
 | POST | `/auth/verify-code` | `{ phone, code }` → `{ token, expiresAt, user }`. Crea al usuario si no existía |
 | POST | `/auth/logout` | **Sesión.** 204; cierra la sesión actual |
@@ -476,8 +479,11 @@ Las migraciones se aplican solas al empezar. Detalle en [`CI.md`](CI.md).
 - `npm run db:reset-seed`: **vacía TODA la base de desarrollo** (también lo que
   cargaste a mano; las personas tienen que volver a ingresar) y vuelve a cargar
   el seed. Las tablas y las migraciones no se tocan.
-- Ambos se niegan a correr con `NODE_ENV=production` o contra una base que no
-  sea local (`scripts/lib/dev-guard.ts`).
+- **Freno de seguridad** (`scripts/lib/dev-guard.ts`): ambos se niegan **siempre** con
+  `NODE_ENV=production` (sin forma de forzarlo), y con una base que no sea local
+  (otro host que `localhost`) solo siguen si se confirma con `--yes`
+  (`npm run db:seed -- --yes`); en ese caso avisan contra qué base van a escribir, y
+  `db:reset-seed` avisa además que la va a vaciar.
 
 - `npm run db:assign-merchant -- <idDelComercio> <teléfono>`: le asigna una
   dueña a un comercio (busca o crea a la persona por teléfono; si ya tenía otro

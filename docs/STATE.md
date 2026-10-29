@@ -147,6 +147,14 @@ dueño: se asignan con `npm run db:assign-merchant`. Esto adelanta el "Auth
 para comercios" que se había postergado (`TODO.md` §2), pero con el ingreso por
 código en lugar de email y contraseña.
 
+**Despliegue en Render + Neon (2026-10-25, escrito sin verificar):** `render.yaml`
+(servicio web gratis, build con `scripts/render-build.sh` que migra con reintento, `healthCheckPath:
+/health`, variables sin valor) y la guía `docs/DESPLIEGUE.md`. El backend ya maneja una base que se
+duerme: reintenta la conexión al arrancar y devuelve `503 DATABASE_UNAVAILABLE` con `Retry-After`
+(no un 500) si la base no responde. `db:seed` y `db:reset-seed` se niegan siempre con
+`NODE_ENV=production` y piden `--yes` contra una base que no sea local. `APP_NAME` define el nombre
+que se muestra (consola, `/auth/config`, texto del SMS). Todavía no se desplegó nada.
+
 **Quién puede crear comercios (2026-10-23, pedido del usuario; verificado por los
 tests, falta probarlo con el front):** `ALLOWED_MERCHANT_PHONES` (lista de teléfonos en una variable de
 entorno). Solo esos teléfonos pueden hacer `POST /merchants` (si no, 403

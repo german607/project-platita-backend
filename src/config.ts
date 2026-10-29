@@ -19,6 +19,12 @@ const splitList = (value: string) =>
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(3000),
+  // Nombre de la app tal como lo ve la gente (la consola /dev, el texto del SMS
+  // con el código, GET /auth/config). Es solo para mostrar, puede tener tildes y
+  // espacios. Hasta 30 caracteres: es el máximo que acepta Twilio para el nombre
+  // que aparece en el mensaje. Los nombres técnicos (base de datos, contenedor)
+  // salen de APP_SLUG en docker-compose.yml, no de acá.
+  APP_NAME: z.string().trim().min(1).max(30).default("Platita"),
   DATABASE_URL: z.string().min(1),
   // Orígenes del frontend autorizados a llamar a la API desde el navegador,
   // separados por coma (ej. "https://app.platita.uy,http://localhost:5173").
@@ -147,6 +153,7 @@ const schema = z.object({
 // en el resto del código: si se suma configuración, se suma a este esquema.
 export const config = schema.parse(process.env);
 export const isProduction = config.NODE_ENV === "production";
+export const appName = config.APP_NAME;
 // Nombre del proveedor de códigos en uso ("dev" si no se configuró otro).
 export const otpProviderName = config.OTP_PROVIDER ?? "dev";
 // Proveedor de prueba en producción (solo demos, con ALLOW_INSECURE_AUTH).

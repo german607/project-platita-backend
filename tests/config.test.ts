@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 // (con sus credenciales reales) no se cuele en el resultado.
 
 const MANAGED = [
+  "APP_NAME",
   "OTP_PROVIDER",
   "OTP_REAL_PHONES",
   "ALLOWED_MERCHANT_PHONES",
@@ -156,6 +157,24 @@ describe("validación de la configuración al arrancar", () => {
       expect(error).toBeInstanceOf(Error);
       expect(error.message).toContain("ALLOWED_MERCHANT_PHONES: el elemento 2");
       expect(error.message).not.toContain("esto-no-es-un-telefono");
+    });
+  });
+
+  describe("APP_NAME (nombre de la app)", () => {
+    it("por defecto es Platita", async () => {
+      const { appName } = await loadConfig();
+      expect(appName).toBe("Platita");
+    });
+
+    it("se puede cambiar (con tildes y espacios) y se recortan los bordes", async () => {
+      const { appName } = await loadConfig({ APP_NAME: "  Ombú Local  " });
+      expect(appName).toBe("Ombú Local");
+    });
+
+    it("no pasa de 30 caracteres, que es lo que acepta Twilio para el texto del mensaje", async () => {
+      await expect(loadConfig({ APP_NAME: "x".repeat(31) })).rejects.toThrow(/APP_NAME/);
+      const { appName } = await loadConfig({ APP_NAME: "x".repeat(30) });
+      expect(appName).toHaveLength(30);
     });
   });
 });

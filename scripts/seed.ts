@@ -5,6 +5,9 @@
 //   npm run db:seed
 //
 // Para borrar TODA la base de desarrollo y volver a cargar, `npm run db:reset-seed`.
+//
+// Freno de seguridad: se niega con NODE_ENV=production, y con una base que no sea
+// local salvo que se confirme con --yes (`npm run db:seed -- --yes`).
 import { db } from "../src/lib/db.js";
 import { assertLocalDevelopment } from "./lib/dev-guard.js";
 import { describeSeed, seedDevelopmentData } from "./lib/seed.js";

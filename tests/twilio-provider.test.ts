@@ -14,7 +14,7 @@ const reply = (status: number, body?: unknown) =>
     headers: { "content-type": "application/json" },
   });
 
-function providerReplying(response: Response | Error, extra: { locale?: string } = {}) {
+function providerReplying(response: Response | Error, extra: { locale?: string; friendlyName?: string } = {}) {
   const fetchImpl = vi.fn(async () => {
     if (response instanceof Error) throw response;
     return response;
@@ -50,6 +50,18 @@ describe("proveedor Twilio Verify", () => {
       const { form } = sentRequest(fetchImpl);
       expect(form.get("Channel")).toBe("whatsapp");
       expect(form.get("Locale")).toBe("es");
+    });
+
+    it("manda el nombre de la app para el texto del mensaje (CustomFriendlyName) si está configurado", async () => {
+      const { fetchImpl, provider } = providerReplying(reply(201, { status: "pending" }), { friendlyName: "Ombú" });
+      await provider.start(PHONE, "sms");
+      expect(sentRequest(fetchImpl).form.get("CustomFriendlyName")).toBe("Ombú");
+    });
+
+    it("sin nombre de la app no manda CustomFriendlyName (queda el del servicio de Verify)", async () => {
+      const { fetchImpl, provider } = providerReplying(reply(201, { status: "pending" }));
+      await provider.start(PHONE, "sms");
+      expect(sentRequest(fetchImpl).form.has("CustomFriendlyName")).toBe(false);
     });
 
     it("si Twilio rechaza el pedido, falla con su código pero sin su mensaje", async () => {

@@ -1,19 +1,25 @@
 import type { FastifyInstance } from "fastify";
+import { appName } from "../config.js";
 
 // Consola de pruebas local: una sola página, sin dependencias ni build.
 // Solo se registra fuera de producción (ver app.ts). Para agregar un
 // endpoint a la página, sumarlo al arreglo ENDPOINTS del script de abajo.
 export async function devConsoleRoutes(app: FastifyInstance) {
   app.get("/", async (_req, reply) => reply.redirect("/dev"));
-  app.get("/dev", async (_req, reply) => reply.type("text/html; charset=utf-8").send(PAGE));
+  app.get("/dev", async (_req, reply) => reply.type("text/html; charset=utf-8").send(renderPage()));
 }
+
+// El nombre de la app sale de la configuración (APP_NAME), escapado para HTML.
+const escapeHtml = (text: string) =>
+  text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const renderPage = () => PAGE.replaceAll("__APP_NAME__", escapeHtml(appName));
 
 const PAGE = /* html */ `<!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Platita — consola de pruebas</title>
+<title>__APP_NAME__ — consola de pruebas</title>
 <style>
   :root { --bg:#f6f7f9; --card:#fff; --line:#d9dde3; --text:#1d2330; --mute:#667085; --accent:#0b6bcb; }
   @media (prefers-color-scheme: dark) {
@@ -45,7 +51,7 @@ const PAGE = /* html */ `<!doctype html>
 </head>
 <body>
 <main>
-  <h1>Platita — consola de pruebas</h1>
+  <h1>__APP_NAME__ — consola de pruebas</h1>
   <p class="sub">Solo desarrollo. Los endpoints están en orden de uso: primero ingresá (pedí un código y verificalo: el token se completa solo), después creá un comercio (quedás como dueña), una regla, un cliente y cargá y cobrá. Todo lo del comercio (/merchants, /customers, /bonus-rules, /locations) lleva el token y solo funciona sobre comercios que son tuyos. Los IDs se completan solos cuando la respuesta trae uno. Montos de entrada en pesos; los de salida, en centésimos.</p>
 
   <div class="card">

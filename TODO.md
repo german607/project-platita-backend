@@ -116,7 +116,7 @@ Este es el **único backlog** del proyecto (ver `docs/AGENTS.md`). El estado gen
 
 - [~] Conflicto de puerto local: `EADDRINUSE` en 3000 porque lo ocupa `iwant-backend`; se corre con `PORT=3001 npm run dev` (verificado 2026-10-13: levanta y `/dev` da 200; falta recorrer el flujo con Postgres arriba)
 - [ ] **P1** Un puerto por defecto que no choque en desarrollo (o `PORT` fijado en `.env.example`) y un mensaje de error claro si está ocupado
-- [ ] **P1** Si la base no responde, devolver 503 con mensaje claro en vez de 500 genérico (`src/lib/error-handler.ts`)
+- [~] **P1** Si la base no responde, devolver 503 `DATABASE_UNAVAILABLE` con `Retry-After` en vez de 500 genérico (`src/lib/error-handler.ts`) y reintentar la conexión al arrancar (`connectWithRetry`); escrito el 2026-10-25 y verificado por tests con errores simulados; falta probarlo con una base de Neon que se duerme de verdad
 - [x] **P0** Dockerfile de la API (multi-stage, healthcheck, CLI de Prisma para migrar); validado por el job Imagen Docker en el PR #5
 - [~] **P1** Paquetes por stage: merge a `dev` publica la imagen `develop` y merge a `main` la `production` en GHCR (`packages.yml`)
 - [ ] **P2** Imagen más liviana: separar la CLI de Prisma de las dependencias de producción
@@ -127,7 +127,9 @@ Este es el **único backlog** del proyecto (ver `docs/AGENTS.md`). El estado gen
 - [x] **P0** Cargar en GitHub el secret de Claude y permitir que Actions apruebe PRs
 - [ ] **P0** Protección de ramas de `dev` y `main` con los checks requeridos y 1 aprobación (pasos en `docs/CI.md`; después de la primera corrida)
 - [ ] **P1** Lint (ESLint) como paso del CI
-- [ ] **P1** Despliegue en un proveedor barato (Railway, Render o Fly.io) + Postgres gestionado: desplegar la imagen `develop` y la `production` desde `packages.yml` (CD)
+- [~] **P1** Despliegue en Render (plan free, `render.yaml` + `scripts/render-build.sh`) con la base en Neon: escrito el 2026-10-25, guía en `docs/DESPLIEGUE.md`; falta crear el Blueprint, desplegar y verificar (build, migraciones, `/health`, el primer pedido tras dormir). Después, el CD desde `packages.yml`: desplegar la imagen `develop` y la `production` desde `packages.yml` (CD)
+- [~] **P1** `db:seed` y `db:reset-seed` con freno de seguridad: se niegan siempre con `NODE_ENV=production` y piden `--yes` si la base no es local (2026-10-25; probado con tests de la regla)
+- [~] **P1** `APP_NAME` (nombre que se muestra: consola `/dev`, `GET /auth/config` y texto del SMS) y `APP_SLUG` (nombre técnico de la base local en `docker-compose.yml`); el resto del nombre (`package.json`, imágenes, workflows, docs) sigue a mano hasta que el nombre sea definitivo (ver `docs/DESPLIEGUE.md` §6)
 - [ ] **P1** Variables de entorno de cada entorno desplegado (incluido el stage `develop`, que también corre con `NODE_ENV=production`): `OTP_PROVIDER=twilio` y sus tres credenciales (o `ALLOW_INSECURE_AUTH=true` solo para una demo), `ALLOWED_MERCHANT_PHONES`, `CORS_ORIGINS` y `TRUST_PROXY` si hay un proxy delante; sin las de ingreso la imagen no arranca (`docs/CI.md`)
 - [ ] **P1** Backups automáticos de la base
 - [ ] **P2** Monitoreo y alertas
@@ -181,3 +183,4 @@ Hito iniciado el 2026-10-15. La web tiene dos áreas con la misma API: comercio 
 - [ ] **P1** Verificar corriendo lo que los tests no cubren de 2026-10-15/16: el relleno de usuarios de la migración `usuarios_globales` sobre una base con datos reales y las rutas `/users` con `INSECURE_USER_ROUTES=false` (perfil, locales y `/places` ya verificados por `tests/`)
 - [ ] **P2** Revisar las 6 vulnerabilidades de `npm audit` en dependencias de desarrollo (vitest 2: vite y esbuild; producción está limpia, `npm audit --omit=dev` da 0): probar una versión más nueva de vitest. No usar `npm audit fix --force`
 - [ ] **P0** Verificar con el frontend lo del 2026-10-22 (migración, `tsc` y tests ya verificados): que mande el token, la pantalla de a qué cuenta entrar según `GET /me`, y que el preflight de CORS del navegador real no pida sesión (hay un test, falta el navegador)
+- [ ] **P1** Verificar con Render + Neon lo del 2026-10-25: que `CustomFriendlyName` (el nombre de la app en el SMS) lo acepte Twilio, cuánto tardan en despertar Render y Neon, y si aparece un `P1017` en el primer pedido

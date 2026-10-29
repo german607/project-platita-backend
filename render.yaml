@@ -1,0 +1,68 @@
+# Blueprint de Render: el servicio web de la API (plan gratis).
+# Se crea con un clic desde Render (New > Blueprint) apuntando a este repo; las
+# variables SIN valor (sync: false) las pide Render al crearlo y se completan en el
+# panel. La base NO se define acá: va aparte, en Neon (ver docs/DESPLIEGUE.md).
+#
+# Notas:
+# - En el plan gratis NO hay "pre-deploy command" (es de planes pagos): las
+#   migraciones corren al final del build. Si una migración falla, el deploy se
+#   cancela y sigue sirviendo la versión anterior.
+# - `npm ci --include=dev` porque en el build Render pone NODE_ENV=production y, sin
+#   eso, no instalaría TypeScript ni los tipos que hacen falta para compilar.
+# - La imagen Docker del repo no se usa acá: Render construye desde el código.
+services:
+  - type: web
+    name: platita-backend
+    runtime: node
+    plan: free
+    # Ohio (AWS us-east-2): conviene crear la base de Neon en la misma región
+    # (AWS US East 2) para que la API y la base estén cerca.
+    region: ohio
+    # scripts/render-build.sh: npm ci --include=dev + prisma generate + build +
+    # prisma migrate deploy (con reintentos: el build despierta la base de Neon y la
+    # primera conexión puede pasarse de tiempo).
+    buildCommand: bash scripts/render-build.sh
+    startCommand: npm start
+    # /health no toca la base, a propósito: así Render no mantiene despierta a Neon.
+    healthCheckPath: /health
+    envVars:
+      # --- Fijas (no son secretas) ---
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      # Detrás del proxy de Render: sin esto los límites por IP no sirven.
+      - key: TRUST_PROXY
+        value: "true"
+
+      # --- A completar en el panel (obligatorias) ---
+      # Cadena de Neon (conexión DIRECTA, sin -pooler) con
+      # ?sslmode=require&connect_timeout=15&pool_timeout=20
+      - key: DATABASE_URL
+        sync: false
+      # URL del frontend (Cloudflare Pages), sin barra final; varias separadas por coma.
+      - key: CORS_ORIGINS
+        sync: false
+      # Teléfonos que pueden crear comercios, separados por coma. Sin esto, en
+      # producción nadie puede crear comercios.
+      - key: ALLOWED_MERCHANT_PHONES
+        sync: false
+      # "twilio" (SMS reales) o "dev" (solo para demos, con ALLOW_INSECURE_AUTH=true).
+      - key: OTP_PROVIDER
+        sync: false
+      # Credenciales de Twilio Verify. Con OTP_PROVIDER=dev pueden ir con cualquier
+      # texto (no se usan), salvo que se use OTP_REAL_PHONES.
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_VERIFY_SID
+        sync: false
+
+      # --- Opcionales: agregarlas a mano en el panel si hacen falta ---
+      # APP_NAME           nombre que se ve en el SMS y en /auth/config (hasta 30 caracteres)
+      # OTP_CHANNEL        sms (por defecto) o whatsapp
+      # TWILIO_LOCALE      idioma del SMS, por ejemplo es
+      # ALLOW_INSECURE_AUTH=true   demo con el código 000000 (cualquiera entra como cualquiera)
+      # OTP_REAL_PHONES    con OTP_PROVIDER=dev, teléfonos que pasan por Twilio igual
+      # INSECURE_USER_ROUTES       dejar sin definir en producción
