@@ -16,6 +16,24 @@ model Merchant {
   createdAt DateTime   @default(now())
   customers Customer[]
   bonuses   BonusRule[]
+  locations Location[]
+
+  // La persona dueña del comercio (la única que puede operarlo). Nulo en los
+  // comercios anteriores a los dueños, hasta asignarles uno (npm run
+  // db:assign-merchant); mientras sea nulo, nadie puede operarlos.
+  ownerId   String?
+  owner     User?     @relation("MerchantOwner", fields: [ownerId], references: [id])
+
+  // Perfil público (lo que ve el cliente en la app). Todo opcional.
+  description       String?
+  photoUrl          String?
+  category          MerchantCategory?
+  categoryChangedAt DateTime?         // último cambio de categoría (regla de 90 días)
+  visible           Boolean           @default(false) // "Aparecer en la app"
+  openingHours      Json?             // semana tipo, hora de Montevideo; ver src/lib/opening-hours.ts
+
+  @@index([visible, category])
+  @@index([ownerId])
 }
 
 enum Plan {
@@ -24,18 +42,105 @@ enum Plan {
   MULTI
 }
 
+enum MerchantCategory {
+  CAFETERIA
+  BARBERIA_PELUQUERIA
+  PILATES_YOGA
+  PANADERIA
+  LAVADERO
+  OTRO
+}
+
+// Local de un comercio. Lo único que cambia entre locales es la dirección
+// (texto: no hay mapa ni coordenadas). El saldo es del comercio, no del local.
+model Location {
+  id         String   @id @default(cuid())
+  merchantId String
+  merchant   Merchant @relation(fields: [merchantId], references: [id])
+  label      String?  // ej. "Pocitos"
+  address    String   // ej. "Av. Brasil 2500, Pocitos"
+  active     Boolean  @default(true) // no hay DELETE: se da de baja con active=false
+  createdAt  DateTime @default(now())
+
+  @@index([merchantId, active])
+}
+
 // Cliente final de un comercio. El saldo es cerrado: solo vale en ese comercio.
 model Customer {
   id           String        @id @default(cuid())
   merchantId   String
   merchant     Merchant      @relation(fields: [merchantId], references: [id])
+  // La persona real detrás de esta ficha: la misma en todos los comercios
+  // (se identifica por teléfono). El saldo sigue siendo de ESTA ficha.
+  userId       String
+  user         User          @relation(fields: [userId], references: [id])
   phone        String
-  name         String?
+  name         String?       // cómo lo anota el comercio; no es el nombre de la persona
   createdAt    DateTime      @default(now())
   lastVisitAt  DateTime?
   transactions Transaction[]
+  idempotencyKeys IdempotencyKey[]
 
   @@unique([merchantId, phone])
+  @@index([merchantId, lastVisitAt])
+  @@index([userId])
+}
+
+// Usuario global: la persona que va a los comercios, identificada por su
+// teléfono (normalizado). Distinto de Customer, que es una ficha por
+// comercio. Hoy se identifica sin verificar (ver src/modules/users).
+model User {
+  id        String     @id @default(cuid())
+  phone     String     @unique
+  name      String?    // nombre que elige la propia persona
+  createdAt DateTime   @default(now())
+  // Se marca la primera vez que verifica el teléfono con el código (null =
+  // existe pero nunca se verificó, ej. lo creó un comercio al anotarlo).
+  phoneVerifiedAt DateTime?
+  customers Customer[]
+  sessions  Session[]
+  // Comercios de los que es dueña (una persona puede tener varios).
+  ownedMerchants Merchant[] @relation("MerchantOwner")
+}
+
+// Sesión de un usuario: un token opaco de un solo valor que se manda como
+// `Authorization: Bearer`. Solo se guarda su hash (sha256). Se revoca al
+// instante poniendo `revokedAt`.
+model Session {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  tokenHash  String    @unique
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime  // se corre hacia adelante mientras se use (ver auth/service.ts)
+  lastUsedAt DateTime  @default(now())
+  revokedAt  DateTime?
+  userAgent  String?
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// Pedidos de código aceptados (para limitar cuántos se mandan por teléfono y
+// por IP: cada mensaje cuesta plata). Se borran a las 24 h.
+model OtpRequest {
+  id        String   @id @default(cuid())
+  phone     String
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([phone, createdAt])
+  @@index([ip, createdAt])
+}
+
+// El código vigente de un teléfono: cuándo se pidió y cuántos intentos van.
+// Un solo registro por teléfono; pedir un código nuevo lo reinicia. El código
+// en sí lo guarda y valida el proveedor, no nosotros.
+model OtpChallenge {
+  id          String   @id @default(cuid())
+  phone       String   @unique
+  requestedAt DateTime @default(now())
+  attempts    Int      @default(0)
 }
 
 // Regla de bonificación: "cargá X y recibís X + bonus"
@@ -43,9 +148,14 @@ model BonusRule {
   id          String   @id @default(cuid())
   merchantId  String
   merchant    Merchant @relation(fields: [merchantId], references: [id])
+  name        String?  // opcional, ej. "Promo $1.000+"
+  description String?
   minTopUp    Int      // en centésimos de peso
   bonusAmount Int      // en centésimos de peso
   active      Boolean  @default(true)
+  transactions Transaction[]
+
+  @@index([merchantId, active])
 }
 
 // Libro mayor: el saldo se calcula sumando movimientos, nunca se guarda suelto.
@@ -58,7 +168,29 @@ model Transaction {
   amount     Int             // centésimos; positivo suma saldo, negativo resta
   paidWith   String?         // "efectivo", "mercadopago", etc. (solo informativo)
   note       String?
+  // Solo en BONUS: de qué regla salió. Nulo en los bonos anteriores a esta columna.
+  bonusRuleId String?
+  bonusRule   BonusRule?     @relation(fields: [bonusRuleId], references: [id])
   createdAt  DateTime        @default(now())
+
+  @@index([customerId, createdAt])
+  @@index([bonusRuleId])
+}
+
+// Claves de idempotencia de cargas, cobros y ajustes: la misma clave con el
+// mismo cuerpo devuelve la respuesta guardada sin registrar de nuevo.
+// Se borran pasadas 48 horas.
+model IdempotencyKey {
+  id          String   @id @default(cuid())
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id])
+  key         String
+  requestHash String   // hash de la operación + cuerpo
+  response    Json
+  createdAt   DateTime @default(now())
+
+  @@unique([customerId, key])
+  @@index([createdAt])
 }
 
 enum TransactionType {

@@ -1,0 +1,182 @@
+# CI: se corre en cada PR hacia dev o main y en cada push a esas ramas.
+# Todo lo que se hace acá se puede reproducir en local (ver docs/CI.md).
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+
+# Si llega un push nuevo al mismo PR, se cancela la corrida anterior.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # main solo recibe lo que ya pasó por dev (o un hotfix urgente).
+  flujo-de-ramas:
+    name: Flujo de ramas
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verificar rama de origen
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if [ "$HEAD_REF" = "dev" ] || [[ "$HEAD_REF" == hotfix/* ]]; then
+            echo "OK: $HEAD_REF -> main"
+          else
+            echo "::error::A main solo se llega desde dev o desde una rama hotfix/*. Esta rama es '$HEAD_REF': abrí el PR contra dev."
+            exit 1
+          fi
+
+  build:
+    name: Build, migraciones y arranque
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: platita
+          POSTGRES_PASSWORD: platita
+          POSTGRES_DB: platita
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U platita"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://platita:platita@localhost:5432/platita
+      # Base aparte para que Prisma compare las migraciones contra el schema.
+      SHADOW_DATABASE_URL: postgresql://platita:platita@localhost:5432/platita_shadow
+      NODE_ENV: test
+      PORT: 3000
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Generar cliente de Prisma
+        run: npx prisma generate
+
+      - name: Chequeo de tipos
+        run: npx tsc --noEmit
+
+      - name: Aplicar migraciones
+        run: npx prisma migrate deploy
+
+      - name: El schema coincide con las migraciones
+        run: |
+          psql "$DATABASE_URL" -c "CREATE DATABASE platita_shadow;"
+          if ! npx prisma migrate diff \
+                 --from-migrations prisma/migrations \
+                 --to-schema-datamodel prisma/schema.prisma \
+                 --shadow-database-url "$SHADOW_DATABASE_URL" \
+                 --exit-code; then
+            echo "::error::prisma/schema.prisma cambió y falta la migración. Corré 'npm run db:migrate' y commiteá la carpeta nueva de prisma/migrations."
+            exit 1
+          fi
+
+      - name: Compilar
+        run: npm run build
+
+      - name: Levanta y responde /health
+        run: |
+          node dist/server.js > server.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/health; then
+              echo
+              echo "OK: el servidor responde"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::El servidor no respondió /health en 30 segundos"
+          cat server.log
+          exit 1
+
+      - name: Tests
+        run: npm test --if-present
+
+  # En cada PR se arma la imagen y se prueba de punta a punta (migraciones y
+  # /health dentro del contenedor). En push no hace falta: lo hace packages.yml.
+  imagen:
+    name: Imagen Docker
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: platita
+          POSTGRES_PASSWORD: platita
+          POSTGRES_DB: platita
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U platita"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Construir la imagen
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: platita-backend:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # La imagen corre con NODE_ENV=production, y en producción el backend se
+      # niega a arrancar sin un proveedor de códigos real (config.ts). Así que la
+      # prueba la levanta con la configuración que usaría en producción: Twilio con
+      # credenciales de MENTIRA (con el formato que se valida: AC… y VA…). No se
+      # llama a Twilio al arrancar, así que alcanza para comprobar que la imagen
+      # levanta con su configuración real.
+      - name: Migraciones y /health dentro del contenedor
+        env:
+          DATABASE_URL: postgresql://platita:platita@localhost:5432/platita
+          OTP_PROVIDER: twilio
+          TWILIO_ACCOUNT_SID: ACcismoketest00000000000000000000
+          TWILIO_AUTH_TOKEN: ci-no-es-un-secreto
+          TWILIO_VERIFY_SID: VAcismoketest00000000000000000000
+        run: |
+          docker run --rm --network host -e DATABASE_URL platita-backend:ci npx prisma migrate deploy
+          docker run -d --name api --network host \
+            -e DATABASE_URL -e OTP_PROVIDER -e TWILIO_ACCOUNT_SID -e TWILIO_AUTH_TOKEN -e TWILIO_VERIFY_SID \
+            platita-backend:ci
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/health; then
+              echo
+              echo "OK: la imagen levanta y responde"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::La imagen no respondió /health en 30 segundos"
+          docker logs api
+          exit 1

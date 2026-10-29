@@ -1,10 +1,19 @@
+# Postgres para desarrollo local.
+#
+# El nombre técnico (usuario, contraseña y base) sale de APP_SLUG, que si no se
+# define vale "platita". Se puede poner en el .env (docker compose lo lee solo).
+# OJO: solo se aplica la PRIMERA vez que se crea el volumen; si ya existía, hay que
+# vaciarlo (`docker compose down -v`, borra los datos) o seguir con el nombre viejo.
+# Si lo cambiás, DATABASE_URL del .env tiene que usar el mismo nombre.
+# El nombre del contenedor y del volumen salen del nombre de esta carpeta, o de
+# COMPOSE_PROJECT_NAME si se define en el .env (cambiarlo crea un volumen nuevo).
 services:
   db:
     image: postgres:16
     environment:
-      POSTGRES_USER: platita
-      POSTGRES_PASSWORD: platita
-      POSTGRES_DB: platita
+      POSTGRES_USER: ${APP_SLUG:-platita}
+      POSTGRES_PASSWORD: ${APP_SLUG:-platita}
+      POSTGRES_DB: ${APP_SLUG:-platita}
     ports:
       - "5432:5432"
     volumes:

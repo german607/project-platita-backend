@@ -119,24 +119,49 @@ Antes de empezar: preguntar a 10 comercios qué usan hoy para fidelizar. Sirve c
 
 ### Correr en local
 
+**Node 22 o más nuevo** (el repo trae un `.nvmrc`: con `nvm use` se elige solo; con Node 20 los tests fallan).
+
 ```bash
+nvm use
 cp .env.example .env
 docker compose up -d
 npm install
 npm run db:migrate
+npm run db:seed     # datos de ejemplo para probar (opcional)
 npm run dev
 ```
 
-### Endpoints
+Con el servidor arriba, `http://localhost:3000/dev` abre una consola de
+pruebas para probar todos los endpoints desde el navegador (solo fuera de
+producción). Si el puerto 3000 está ocupado: `PORT=3001 npm run dev`.
 
-| Método | Ruta | Qué hace |
-|---|---|---|
-| GET | `/health` | Chequeo de vida |
-| POST | `/merchants/:merchantId/customers` | Busca o crea cliente por teléfono |
-| GET | `/customers/:id/balance` | Saldo actual |
-| POST | `/customers/:id/topups` | Registra carga y aplica bonificación |
-| POST | `/customers/:id/charges` | Cobra descontando saldo |
-| GET | `/merchants/:merchantId/inactive?days=60` | Clientes inactivos para campañas |
+**Datos de ejemplo.** `npm run db:seed` carga personas con teléfonos fijos,
+comercios visibles con locales, horarios y promos, y clientes con saldos y
+movimientos (incluye casos para probar: saldo 0, clientes que no vienen hace
+más de 30 días y una persona con saldo en varios comercios). Se puede repetir
+sin duplicar. Imprime qué teléfono entra a qué cuenta; en local todos entran con
+el código `000000`. `npm run db:reset-seed` **borra toda la base de desarrollo**
+y vuelve a cargar los datos de ejemplo. Ambos se niegan a correr en producción
+o contra una base que no sea local.
+
+**Desplegar.** La API va en Render y la base en Neon (planes gratis): la guía paso a paso, las
+variables y qué pasa cuando se duermen está en [`docs/DESPLIEGUE.md`](docs/DESPLIEGUE.md) y el
+Blueprint en `render.yaml`.
+
+**Ingreso de prueba y SMS reales.** Con `OTP_PROVIDER=dev` (el valor por defecto
+en `.env.example`) cualquier teléfono entra con `000000`. Para probar un SMS real
+con tu número sin perder eso, ver `OTP_REAL_PHONES` en `.env.example` y la sección
+"Ingreso real" de [`docs/BACKEND.md`](docs/BACKEND.md).
+
+### Endpoints y documentación técnica
+
+La tabla de endpoints, la arquitectura del backend y las reglas del
+dominio viven en [`docs/BACKEND.md`](docs/BACKEND.md) (una sola copia, para
+que no se desactualice). Un caso de uso narrado que pasa por todos los
+endpoints está en [`docs/EJEMPLO.md`](docs/EJEMPLO.md). El estado actual
+del proyecto, en [`docs/STATE.md`](docs/STATE.md). El flujo de ramas y
+los checks automáticos de cada PR (CI y revisión con IA), en
+[`docs/CI.md`](docs/CI.md).
 
 ### Próximos pasos
 
